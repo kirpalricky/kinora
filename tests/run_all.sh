@@ -11,6 +11,12 @@ set -e
 KINORA_HOME="$(mktemp -d)"; export KINORA_HOME
 trap 'rm -rf "$KINORA_HOME"' EXIT
 cp cameras.example.json "$KINORA_HOME/cameras.json"
+# code under test resolves ffmpeg before the (mocked) subprocess runs: without FFmpeg installed (CI), point KINORA_FFMPEG at an
+# inert stub. Not put on PATH, and not used when a real ffmpeg exists, so the tests that need real ffmpeg still run or skip themselves.
+if [ -z "$KINORA_FFMPEG" ] && ! command -v ffmpeg >/dev/null 2>&1; then
+  printf '#!/bin/sh\nexit 0\n' > "$KINORA_HOME/ffmpeg-stub"; chmod +x "$KINORA_HOME/ffmpeg-stub"
+  KINORA_FFMPEG="$KINORA_HOME/ffmpeg-stub"; export KINORA_FFMPEG
+fi
 export KINORA_NO_INSTANCE_LOCK=1
 $PY -m unittest tests.test_gate tests.test_listings_export tests.test_slots tests.test_slots_register tests.test_session_lock tests.test_errors tests.test_live_argv tests.test_config_home \
   tests.test_gate_hardening tests.test_instance tests.test_live_gate \

@@ -139,8 +139,10 @@ class GateRefusalInP2pClip(unittest.TestCase):
             finally:
                 await client.close()
 
+        # require_pytapo_tools is mocked: CI has no ffmpeg/ffprobe on PATH
         with mock.patch.object(server, "api", fake_api), \
                 mock.patch.object(server, "client", lambda cam: None), \
+                mock.patch.object(server, "require_pytapo_tools", lambda: None), \
                 mock.patch.object(server.p2p_media, "fetch_window", fake_window), \
                 mock.patch.object(server, "media_failed") as failed, \
                 mock.patch.dict(server._fail, clear=True), \

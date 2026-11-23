@@ -225,7 +225,7 @@ const count = re => (html.match(re) || []).length;
 check('tokens: light track and a quiet recording colour (events carry the contrast)', html.includes('--track:#EEEEF4;--rec:#9FA1B8'));
 check('tokens: dark timeline uses the surface and a quiet recording colour, in both dark blocks', count(/--track:var\(--c-surface-2\);--rec:#5C5F75/g) === 2);
 check('tokens: dark strong line and secondary text, in both dark blocks', count(/--c-line-strong:#6B6F86/g) === 2 && count(/--c-text-3:#8D90A2/g) === 2);
-check('tokens: light strong line and text tokens (cool neutrals)', html.includes('--c-line-strong:#83849A') && html.includes('--c-text-2:#565869') && html.includes('--c-text-3:#666879'));
+check('tokens: light strong line and text tokens (cool neutrals)', html.includes('--c-line-strong:#8B8CA0') && html.includes('--c-text-2:#565869') && html.includes('--c-text-3:#666879'));
 check('timeline: rounded strip, hatched no-footage gaps and merged event ranges', /roundRect\(0,TT,W,H-TT,8\)/.test(appjs) && /mergeEvents\(events\.filter/.test(appjs) && /gapsOf\(clips,dayStart/.test(appjs));
 check('specificity: the field rule is :where() (0,0,0 extra), so the number, invalid, hover and focus rules win', html.includes('#setup :where(input:not([type=radio],[type=checkbox]),select){')
   && !html.includes('#setup input:not([type=radio]):not([type=checkbox]),#setup select{width'));
