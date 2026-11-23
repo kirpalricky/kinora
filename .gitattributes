@@ -1,0 +1,2 @@
+# Shell scripts must stay LF: a CRLF checkout on Windows breaks them under sh/WSL
+*.sh text eol=lf
