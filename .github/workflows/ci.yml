@@ -52,3 +52,24 @@ jobs:
         run: |
           python -m pip install build
           sh tests/package_smoke.sh
+
+  # The README tells Windows users to run Kinora under WSL as Linux: check that path works.
+  wsl-smoke:
+    name: package-smoke / windows WSL (Ubuntu)
+    runs-on: windows-latest
+    # Reported, not blocking, same as the native Windows job
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Vampire/setup-wsl@v3
+        with:
+          distribution: Ubuntu-24.04
+          additional-packages: python3 python3-venv python3-pip ffmpeg
+      - name: Package smoke test (inside WSL)
+        shell: wsl-bash {0}
+        env:
+          PY: python3
+        run: |
+          python3 -m venv /tmp/buildenv
+          /tmp/buildenv/bin/pip install build
+          PY=/tmp/buildenv/bin/python sh tests/package_smoke.sh

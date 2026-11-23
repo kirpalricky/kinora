@@ -17,6 +17,8 @@ kinora                     # starts the server and opens http://localhost:8080 o
 ```
 Kinora needs FFmpeg on your PATH (macOS: `brew install ffmpeg`; Debian/Ubuntu: `sudo apt install ffmpeg`). Run `kinora doctor` for a plain checklist (Python, data folder, ffmpeg, keyring, port); it never contacts a camera. Options: `--port N`, `--no-browser`, `--home PATH`, `--version`.
 
+**Windows:** run Kinora under [WSL](https://learn.microsoft.com/windows/wsl/install) (`wsl --install` in an admin PowerShell, then open the Ubuntu shell) and follow the Linux steps above (`sudo apt install ffmpeg`, `pipx install ...`, `kinora`). Open http://localhost:8080 in your Windows browser. Your cameras must be reachable from WSL: if they are not, enable WSL's mirrored networking (`networkingMode=mirrored` in `%UserProfile%\.wslconfig`, then `wsl --shutdown`).
+
 ## Run from a checkout
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
