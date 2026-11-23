@@ -123,7 +123,7 @@ def run_doctor(home=None, port=None, which=shutil.which, keyring_status=None, po
     hint = binaries.install_hint() if hint is None else hint
     rows = []
     v = sys.version_info
-    rows.append((OK if v >= (3, 10) else FAIL, f"Python {v.major}.{v.minor}.{v.micro}" + ("" if v >= (3, 10) else " (Kinora needs 3.10 or newer)")))
+    rows.append((OK if v >= (3, 11) else FAIL, f"Python {v.major}.{v.minor}.{v.micro}" + ("" if v >= (3, 11) else " (Kinora needs 3.11 or newer)")))
     rows.append(_data_folder_check(home))
     for tool in ("ffmpeg", "ffprobe"):
         found = which(tool)

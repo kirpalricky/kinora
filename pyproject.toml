@@ -8,7 +8,7 @@ name = "kinora-cams"
 dynamic = ["version"]   # single source: kinora.config.VERSION
 description = "Scrubbable playback of Tapo camera SD cards, in your browser (local only)."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 # TODO(owner): choose the license (MIT vs Apache-2.0), then add `license = ...` here and a LICENSE file. Not decided yet.
 # Compatible ranges; the exact tested pins live in requirements.txt (the lock). pytapo stays pinned (design 10.4 Q6).
 dependencies = [
