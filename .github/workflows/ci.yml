@@ -8,16 +8,12 @@ jobs:
   offline-tests:
     name: ${{ matrix.os }} / py${{ matrix.python }}
     runs-on: ${{ matrix.os }}
-    # Windows is v1.1: its failures are reported but do not fail the workflow
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    # Native Windows is v1.1 and not tested here; the wsl-smoke job covers Windows via WSL
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
         python: ["3.11", "3.12", "3.13"]
-        include:
-          - os: windows-latest
-            python: "3.13"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
