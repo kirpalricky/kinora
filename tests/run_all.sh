@@ -24,7 +24,7 @@ $PY -m unittest tests.test_gate tests.test_listings_export tests.test_slots test
   tests.test_p2p_punch tests.test_pytapo_guard tests.test_registry tests.test_setup_api tests.test_discover tests.test_thumb tests.test_native_thumb tests.test_cli
 $PY tests/test_udt.py
 $PY tests/test_p2p_setup.py
-$PY tests/test_play.py
+command -v ffmpeg >/dev/null && $PY tests/test_play.py   # builds a synthetic clip with real ffmpeg
 command -v node >/dev/null && node tests/test_prefetch.js
 command -v node >/dev/null && node tests/test_setup_logic.js
 command -v node >/dev/null && node tests/test_player_logic.js
