@@ -15,6 +15,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         python: ["3.11", "3.12", "3.13"]
+        # macOS runners are scarce (concurrency cap): only the oldest supported Python there, ubuntu covers the rest
+        exclude:
+          - os: macos-latest
+            python: "3.12"
+          - os: macos-latest
+            python: "3.13"
         include:
           - os: windows-latest
             python: "3.13"
