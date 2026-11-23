@@ -1,0 +1,32 @@
+[
+  {
+    "id": "c200",
+    "name": "Living Room",
+    "ip": "192.168.1.200",
+    "auth": "admin_cloud",
+    "enabled": true,
+    "ptz": true,
+    "fast_forward": true
+  },
+  {
+    "id": "c201",
+    "name": "Kitchen",
+    "ip": "192.168.1.201",
+    "auth": "cam_cloud",
+    "enabled": true,
+    "ptz": true,
+    "fast_forward": true
+  },
+  {
+    "id": "c199",
+    "name": "Baby Room",
+    "ip": "192.168.1.199",
+    "auth": "admin_cloud",
+    "enabled": true,
+    "p2p": true,
+    "thumbs": false,
+    "win": 30,
+    "stream_playback": true,
+    "fast_forward": true
+  }
+]

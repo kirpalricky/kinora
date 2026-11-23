@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# The final PyPI name still needs a check (placeholder "kinora-cams"; the command and import package are `kinora`).
+name = "kinora-cams"
+dynamic = ["version"]   # single source: kinora.config.VERSION
+description = "Scrubbable playback of Tapo camera SD cards, in your browser (local only)."
+readme = "README.md"
+requires-python = ">=3.10"
+# TODO(owner): choose the license (MIT vs Apache-2.0), then add `license = ...` here and a LICENSE file. Not decided yet.
+# Compatible ranges; the exact tested pins live in requirements.txt (the lock). pytapo stays pinned (design 10.4 Q6).
+dependencies = [
+    "aiohttp>=3.9,<4",
+    "pytapo==3.4.34",
+    "platformdirs>=4,<5",
+    "keyring>=25,<26",
+    "psutil>=5.9,<8",
+    "aiofiles>=23",   # pytapo imports it but does not declare it
+]
+
+[project.scripts]
+kinora = "kinora.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["kinora*"]
+
+[tool.setuptools.package-data]
+kinora = ["web/index.html", "web/static/*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "kinora.config.VERSION"}

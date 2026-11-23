@@ -1,0 +1,36 @@
+.venv/
+__pycache__/
+.env
+cache/
+exports/
+.venv-asr/
+analysis/out/
+captures/
+re/
+.DS_Store
+*.part.mp4
+.claude/worktrees/
+
+# per-user camera table (private IPs); see cameras.example.json
+cameras.json
+cameras.json.bak
+settings.json
+secrets.json
+
+# public-release safety net (private data must never be committed)
+.env
+.env.*
+breaker.json
+*.mp4
+*.jpg
+*.jpeg
+*.wav
+*.pcap
+*.pcapng
+*.apk
+*.tar.xz
+*.bak
+.claude/settings.local.json
+dist/
+build/
+*.egg-info/

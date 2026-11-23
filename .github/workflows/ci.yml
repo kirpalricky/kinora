@@ -1,0 +1,54 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  offline-tests:
+    name: ${{ matrix.os }} / py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    # Windows is v1.1: its failures are reported but do not fail the workflow
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.10", "3.12", "3.13"]
+        include:
+          - os: windows-latest
+            python: "3.13"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      # The suite is offline (no camera, no ffmpeg needed). run_all.sh is POSIX sh: bash (git bash on Windows).
+      - name: Run offline tests
+        shell: bash
+        env:
+          PY: python
+        run: sh tests/run_all.sh
+
+  # Build the wheel, install it in a clean venv and fetch the UI from a real `kinora` process (127.0.0.1, temp home).
+  package-smoke:
+    name: package-smoke / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Package smoke test
+        shell: bash
+        env:
+          PY: python
+        run: |
+          python -m pip install build
+          sh tests/package_smoke.sh

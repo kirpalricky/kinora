@@ -1,0 +1,42 @@
+name: Bug report
+description: Something in Kinora does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Privacy first.** Do not attach video, thumbnails, screenshots of the player, passwords, camera IP addresses, MAC addresses, serial numbers or account emails. Redact logs before pasting.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Kinora version
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [macOS, Windows, Linux, Other]
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+  - type: input
+    id: model
+    attributes:
+      label: Camera model and firmware (if relevant)
+      description: For example "C200, firmware 1.9.2". No IP, MAC or serial.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted log output
+      render: text

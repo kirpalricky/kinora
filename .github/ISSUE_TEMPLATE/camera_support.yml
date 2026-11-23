@@ -1,0 +1,42 @@
+name: Camera support report
+description: Tell us how a camera model works (or does not) with Kinora
+labels: [camera-support]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do **not** include passwords, IP addresses, MAC addresses, serial or device ids, account emails, video or thumbnails. Model and firmware are all we need.
+        Note: repeated failed logins lock a camera for about 30 minutes. Do not retry in a loop while testing.
+  - type: input
+    id: model
+    attributes:
+      label: Camera model
+      placeholder: C200
+    validations:
+      required: true
+  - type: input
+    id: hw
+    attributes:
+      label: Hardware version
+      placeholder: "3.0"
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware version
+      placeholder: 1.9.2
+    validations:
+      required: true
+  - type: checkboxes
+    id: works
+    attributes:
+      label: What works
+      options:
+        - label: SD card recordings list
+        - label: Thumbnails
+        - label: Playback and scrubbing
+        - label: Live view
+        - label: PTZ (pan/tilt)
+  - type: textarea
+    id: notes
+    attributes:
+      label: What fails, and any error text (redacted)
