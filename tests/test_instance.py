@@ -36,10 +36,7 @@ class SingleInstance(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.lock = Path(tmp.name) / "server.lock"
-        self.legacy = Path(tmp.name) / "legacy" / "server.lock"
-        self.legacy.parent.mkdir()
         for p in (mock.patch.object(instance, "lock_path", lambda: self.lock),
-                  mock.patch.object(instance, "legacy_lock_path", lambda: self.legacy),
                   mock.patch.object(instance, "_held", []),
                   mock.patch.dict(os.environ, {}, clear=False)):
             p.start()
@@ -77,28 +74,6 @@ class SingleInstance(unittest.TestCase):
         self.addCleanup(handle.close)
         with mock.patch.dict(os.environ, {"KINORA_NO_INSTANCE_LOCK": "1"}):
             self.assertIsNone(instance.acquire())
-
-    def test_old_server_holding_the_legacy_lock_blocks_the_new_one(self):
-        from kinora.oslock import os_lock
-        f = open(self.legacy, "a+b")
-        self.addCleanup(f.close)
-        os_lock(f, blocking=False)
-        with self.assertRaisesRegex(instance.AlreadyRunning, "older tapo-cameras server"):
-            instance.acquire()
-        # the new lock was released again: nothing is left held by the failed attempt
-        g = open(self.lock, "a+b")
-        self.addCleanup(g.close)
-        os_lock(g, blocking=False)
-
-    def test_new_server_holds_the_legacy_lock_too(self):
-        from kinora.oslock import os_lock
-        handle = instance.acquire()
-        self.addCleanup(handle.close)
-        self.addCleanup(lambda: [h.close() for h in instance._held])
-        old = open(self.legacy, "a+b")
-        self.addCleanup(old.close)
-        with self.assertRaises(OSError):
-            os_lock(old, blocking=False)     # an old-code server would be refused
 
     def test_lock_lives_in_user_cache_dir_not_the_data_dir(self):
         with mock.patch.object(instance, "user_cache_dir", lambda app: str(self.lock.parent / "cache-root")), \

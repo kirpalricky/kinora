@@ -2,7 +2,7 @@
 TP-Link (cloud) account whose email is in settings.json (`account_email`).
 
 Per-camera secrets live in the store chosen by `credential_store` in <HOME>/settings.json:
-    keyring (default)  OS keyring, service "kinora" (items under the old service "tapo-cameras" are copied over on first read), username "camera:<device_id or id>" / "cloud:<email>"
+    keyring (default)  OS keyring, service "kinora" username "camera:<device_id or id>" / "cloud:<email>"
     file               <HOME>/secrets.json, mode 0600 (refused when group/other can read it)
     env                read-only: no per-camera store; writes are refused
 A store that cannot be read raises RuntimeError: it is never read as "no secret" (no login, no failure counted).
@@ -10,7 +10,7 @@ Every store key starts with "camera:" or "cloud:": other items under the same se
 
 Developer fallbacks are OFF unless the environment has KINORA_DEV_SECRETS=1 (the server logs one line when they are on):
 TAPO_PASS / TAPO_CLOUD_PASS / TAPO_USER environment variables, the .env file in the data folder, the macOS `security`
-CLI, and the older global keyring items (service "kinora" or the old "tapo-cameras", account = camera user; "kinora-cloud" or the old "tapo-cameras-cloud",
+CLI, and the global keyring items (service "kinora", account = camera user; "kinora-cloud",
 account = the saved TP-Link email). The cloud item is looked up only for the saved email, never without an account.
 A secret that comes from a developer fallback is reported as "dev_override".
 
@@ -36,10 +36,6 @@ from kinora import config
 
 SERVICE = "kinora"
 CLOUD_SERVICE = "kinora-cloud"
-# Names used before the rename to Kinora. Read-through migration copies items from them to the new services;
-# the old items are never deleted automatically.
-OLD_SERVICE = "tapo-cameras"
-OLD_CLOUD_SERVICE = "tapo-cameras-cloud"
 STORES = ("keyring", "file", "env")
 DEV_ENV = "KINORA_DEV_SECRETS"
 KEY_PREFIXES = ("camera:", "cloud:")
@@ -61,7 +57,7 @@ def announce_dev_secrets():
 
 
 def _from_dotenv(key):
-    # config.HOME is the repo in the legacy layout, so this is ROOT/.env there
+    # config.HOME is the checkout in the dev layout, so this is ROOT/.env there
     f = config.HOME / ".env"
     if f.exists():
         for line in f.read_text().splitlines():
@@ -100,13 +96,12 @@ def _camera_user():
 def _stored_camera_password(user):
     # Developer only. macOS: the `security` CLI first. The keyring backend may show a GUI prompt, and this runs while
     # the login gate's file lock is held, so a prompt there would stall every other process on the lock.
-    return (_macos_security(SERVICE, user) or _macos_security(OLD_SERVICE, user)
-            or _keyring_get(SERVICE, user) or _keyring_get(OLD_SERVICE, user))
+    return _macos_security(SERVICE, user) or _keyring_get(SERVICE, user)
 
 
 @lru_cache(maxsize=1)
 def get_credentials():
-    """Developer fallback (KINORA_DEV_SECRETS=1): the global camera login from TAPO_PASS, .env or the legacy keyring or
+    """Developer fallback (KINORA_DEV_SECRETS=1): the global camera login from TAPO_PASS, .env or the global keyring or
     Keychain item. Refused otherwise: the product path never reads these."""
     if not dev_secrets():
         raise RuntimeError(NO_ACCOUNT)
@@ -148,9 +143,8 @@ def get_cloud_password():
 
 
 def _dev_cloud_item(account):
-    """Global TP-Link password item for `account`: the new service first, then the pre-rename one."""
-    return (_keyring_get(CLOUD_SERVICE, account) or _macos_security(CLOUD_SERVICE, account)
-            or _keyring_get(OLD_CLOUD_SERVICE, account) or _macos_security(OLD_CLOUD_SERVICE, account))
+    """Global TP-Link password item for `account`."""
+    return _keyring_get(CLOUD_SERVICE, account) or _macos_security(CLOUD_SERVICE, account)
 
 
 def _dev_cloud_password(email):
@@ -289,16 +283,7 @@ def _store_get(key):
     mode = credential_store()
     if mode == "keyring":
         try:
-            found = keyring.get_password(SERVICE, key)
-            if found:
-                return found
-            old = keyring.get_password(OLD_SERVICE, key)   # pre-rename item: copy it over, keep the old one
-            if old:
-                try:
-                    keyring.set_password(SERVICE, key, old)
-                except KeyringError:
-                    pass   # still usable from the old item; the copy is retried on the next read
-            return old or None
+            return keyring.get_password(SERVICE, key) or None
         except keyring_errors.NoKeyringError:   # no backend on this system: nothing is stored here
             return None
         except KeyringError as e:
@@ -332,17 +317,12 @@ def _store_delete(key):
     if mode == "env":
         raise RuntimeError(_READ_ONLY)
     if mode == "keyring":
-        # the pre-rename item first, then the current one: if the old delete fails the new item still exists, so the
-        # secret stays visible and the user can retry (the other order would let the read-through copy bring it back)
-        for service, what in ((OLD_SERVICE, "the old (tapo-cameras) keychain item"), (SERVICE, "the saved password")):
-            try:
-                keyring.delete_password(service, key)
-            except keyring_errors.PasswordDeleteError:
-                pass   # not stored
-            except KeyringError:
-                raise RuntimeError(f"Could not delete {what} from the OS keyring. "
-                                   + ("Nothing was deleted: try again." if service == OLD_SERVICE
-                                      else "The old keychain item was removed; delete the saved password again.")) from None
+        try:
+            keyring.delete_password(SERVICE, key)
+        except keyring_errors.PasswordDeleteError:
+            pass   # not stored
+        except KeyringError:
+            raise RuntimeError("Could not delete the saved password from the OS keyring: try again.") from None
         return
     data = _file_read()
     if data.pop(key, None) is not None:
@@ -496,20 +476,18 @@ def _cmd_status():
     user = _camera_user()
     env_pass = bool(os.environ.get("TAPO_PASS"))
     dotenv_pass = bool(_from_dotenv("TAPO_PASS"))
-    kr_pass = bool(_keyring_get(SERVICE, user) or _keyring_get(OLD_SERVICE, user))
-    mac_pass = (bool(_macos_security(SERVICE, user) or _macos_security(OLD_SERVICE, user))
-                if sys.platform == "darwin" else None)
+    kr_pass = bool(_keyring_get(SERVICE, user))
+    mac_pass = bool(_macos_security(SERVICE, user)) if sys.platform == "darwin" else None
     print(f"developer fallbacks: on ({DEV_ENV}=1)")
     print(f"camera user: {user}")
     print(f"  TAPO_PASS in environment: {yn(env_pass)}")
     print(f"  TAPO_PASS in .env: {yn(dotenv_pass)}")
-    print(f"  OS keyring (service {SERVICE} or {OLD_SERVICE}): {yn(kr_pass)}")
+    print(f"  OS keyring (service {SERVICE}): {yn(kr_pass)}")
     if mac_pass is not None:
         print(f"  macOS Keychain via security CLI: {yn(mac_pass)}")
     cloud_env = bool(os.environ.get("TAPO_CLOUD_PASS"))
     cloud_account = os.environ.get("TAPO_CLOUD_ACCOUNT")
-    cloud_kr = (bool(_keyring_get(CLOUD_SERVICE, cloud_account) or _keyring_get(OLD_CLOUD_SERVICE, cloud_account))
-                if cloud_account else None)
+    cloud_kr = bool(_keyring_get(CLOUD_SERVICE, cloud_account)) if cloud_account else None
     print("cloud password:")
     print(f"  TAPO_CLOUD_PASS in environment: {yn(cloud_env)}")
     print(f"  OS keyring (service {CLOUD_SERVICE}, account TAPO_CLOUD_ACCOUNT "
@@ -527,5 +505,4 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    config.init()   # same startup as the server: the one-time data folder move (never while an old server runs)
     sys.exit(main(sys.argv[1:]))

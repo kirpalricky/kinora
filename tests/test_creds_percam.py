@@ -214,25 +214,6 @@ class WritesAndCache(Base):
             creds.get_camera_credentials(KITCHEN)
         self.assertEqual(creds.secret_sources(KITCHEN)["camera"], "missing")
 
-    def test_failed_old_item_delete_keeps_the_new_item(self):
-        from keyring.errors import KeyringError
-        creds.set_camera_secret(KITCHEN, "kitchen-user", CAM_PW)
-        key = creds.camera_key(KITCHEN)
-        self.kr.store[(creds.OLD_SERVICE, key)] = "old-" + CAM_PW
-        real = self.kr.delete_password
-
-        def delete(service, username):
-            if service == creds.OLD_SERVICE:
-                raise KeyringError("locked")
-            return real(service, username)
-        self.kr.delete_password = delete
-        with self.assertRaises(RuntimeError) as cm:
-            creds.delete_camera_secret(KITCHEN)
-        self.assertIn("old", str(cm.exception))
-        self.assertNotIn(CAM_PW, str(cm.exception))
-        self.assertIn((creds.SERVICE, key), self.kr.store)        # the new item still exists
-        self.assertEqual(creds.get_camera_credentials(KITCHEN)[1], CAM_PW)
-
     def test_changed_password_is_used_on_the_next_login(self):
         creds.set_camera_secret(KITCHEN, "kitchen-user", CAM_PW)
         self.assertEqual(creds.get_camera_credentials(KITCHEN)[1], CAM_PW)
@@ -351,59 +332,40 @@ class EnvStore(Base):
         self.assertIn("keyring, file, env", str(cm.exception))
 
 
-class RenameMigration(Base):
-    """Items stored under the pre-rename service "tapo-cameras" are found, copied to "kinora" and never deleted."""
+class KeyringStore(Base):
+    """Reads and deletes in the "kinora" keyring service."""
     KEY = "camera:ck"
     VALUE = '{"user": "u", "password": "%s"}' % CAM_PW
 
-    def test_old_item_is_copied_and_kept(self):
-        self.kr.set_password(creds.OLD_SERVICE, self.KEY, self.VALUE)
+    def test_stored_item_is_read_back(self):
+        self.kr.set_password(creds.SERVICE, self.KEY, self.VALUE)
         self.assertEqual(creds._store_get(self.KEY), self.VALUE)
-        self.assertEqual(self.kr.store[(creds.SERVICE, self.KEY)], self.VALUE)       # copied
-        self.assertEqual(self.kr.store[(creds.OLD_SERVICE, self.KEY)], self.VALUE)   # old one kept
-        self.assertEqual(creds._store_get(self.KEY), self.VALUE)
-
-    def test_new_item_wins_and_old_is_untouched(self):
-        self.kr.set_password(creds.SERVICE, self.KEY, "new")
-        self.kr.set_password(creds.OLD_SERVICE, self.KEY, "old")
-        self.assertEqual(creds._store_get(self.KEY), "new")
-        self.assertEqual(self.kr.store[(creds.OLD_SERVICE, self.KEY)], "old")
-
-    def test_cloud_item_migrates_too(self):
-        key = creds.cloud_key(EMAIL)
-        self.kr.set_password(creds.OLD_SERVICE, key, CLOUD_PW)
-        self.assertEqual(creds._store_get(key), CLOUD_PW)
-        self.assertEqual(self.kr.store[(creds.SERVICE, key)], CLOUD_PW)
 
     def test_nothing_stored_is_none(self):
         self.assertIsNone(creds._store_get(self.KEY))
         self.assertEqual(self.kr.store, {})
 
-    def test_unreadable_store_still_raises_and_leaks_nothing(self):
+    def test_unreadable_store_raises_and_leaks_nothing(self):
         from keyring.errors import KeyringLocked
-        self.kr.set_password(creds.OLD_SERVICE, self.KEY, self.VALUE)
+        self.kr.set_password(creds.SERVICE, self.KEY, self.VALUE)
         with mock.patch.object(self.kr, "get_password", side_effect=KeyringLocked("locked")):
             with self.assertRaises(RuntimeError) as cm:
                 creds._store_get(self.KEY)
         self.assertNotIn(SENTINEL, str(cm.exception))
 
-    def test_failed_copy_still_returns_the_old_secret(self):
-        from keyring.errors import KeyringError
-        self.kr.set_password(creds.OLD_SERVICE, self.KEY, self.VALUE)
-        with mock.patch.object(self.kr, "set_password", side_effect=KeyringError("denied")):
-            self.assertEqual(creds._store_get(self.KEY), self.VALUE)
-
-    def test_delete_removes_both_so_it_cannot_come_back(self):
+    def test_delete_removes_the_item(self):
         self.kr.set_password(creds.SERVICE, self.KEY, "a")
-        self.kr.set_password(creds.OLD_SERVICE, self.KEY, "b")
         creds._store_delete(self.KEY)
         self.assertIsNone(creds._store_get(self.KEY))
 
-    def test_dev_fallback_reads_old_global_item(self):
-        os.environ["KINORA_DEV_SECRETS"] = "1"
-        self.kr.set_password(creds.OLD_SERVICE, "rtspadmin", GLOBAL_PW)
-        creds.get_credentials.cache_clear()
-        self.assertEqual(creds.get_credentials(), ("rtspadmin", GLOBAL_PW))
+    def test_failed_delete_keeps_the_item_and_leaks_nothing(self):
+        from keyring.errors import KeyringError
+        self.kr.set_password(creds.SERVICE, self.KEY, self.VALUE)
+        with mock.patch.object(self.kr, "delete_password", side_effect=KeyringError("locked")):
+            with self.assertRaises(RuntimeError) as cm:
+                creds._store_delete(self.KEY)
+        self.assertNotIn(CAM_PW, str(cm.exception))
+        self.assertEqual(creds._store_get(self.KEY), self.VALUE)
 
 
 class NoKeyring(Base):

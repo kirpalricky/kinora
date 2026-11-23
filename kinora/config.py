@@ -1,127 +1,34 @@
 """Paths, port, camera table and tunables shared by the services.
 
-Importing this module has no side effects on disk. The one-time move of the pre-rename data folder happens only in
-`init()`, which the entry points call (server after the instance lock, `python -m kinora.creds`, `python -m
-kinora.camera.gate`). `ensure_dirs()` creates the working folders."""
+Importing this module has no side effects on disk. `ensure_dirs()` creates the working folders."""
 import ipaddress
 import json
 import os
 import re
-import sys
 from pathlib import Path
 
-from platformdirs import user_cache_dir, user_data_dir
-
-from kinora.oslock import os_lock
+from platformdirs import user_data_dir
 
 ROOT = Path(__file__).resolve().parent.parent   # checkout directory (dev layout: cameras.json, .env); site-packages when installed
 WEB = Path(__file__).resolve().parent / "web"   # index.html and static/: package data, shipped in the wheel
 
 
 def env(name, default=None):
-    """Environment setting KINORA_<name>; falls back to the old TAPOCAM_<name> name (still accepted)."""
-    for prefix in ("KINORA_", "TAPOCAM_"):
-        value = os.environ.get(prefix + name)
-        if value is not None:
-            return value
-    return default
-
-
-def _has_data(folder):
-    """True when the folder holds cameras or login-gate state (an empty folder is not worth keeping)."""
-    folder = Path(folder)
-    return (folder / "cameras.json").exists() or (folder / "cache" / "meta" / "breaker.json").exists()
-
-
-def plan_legacy_home(new, old):
-    """Decide, without touching the disk, which per-user folder to use. -> (folder, move, note).
-
-    move=True: only `old` exists, it should be renamed to `new` (done by init(), never at import).
-    note: a sentence for stderr, or None. Both folders present: the one that holds data wins, never a merge.
-    """
-    new, old = Path(new), Path(old)
-    if new.exists():
-        if old.is_dir() and old != new:
-            if _has_data(new):
-                return new, False, f"both {new} and the old data folder {old} exist; using {new}, {old} was left alone"
-            if _has_data(old):
-                return old, False, (f"{new} holds no cameras or login state but the old data folder {old} does: "
-                                    f"using {old} for now. Move its contents into {new} by hand, or remove the empty {new}")
-        return new, False, None
-    if old.is_dir() and old != new:
-        return old, True, None
-    return new, False, None
-
-
-def migrate_legacy_home(new, old, legacy_lock_held=False):
-    """Move the pre-rename data folder `old` to `new`, once. -> the folder to use. Never merges, never creates `new`
-    when the move did not happen. Refuses to move while an old-code server holds the legacy instance lock."""
-    new, old = Path(new), Path(old)
-    folder, move, note = plan_legacy_home(new, old)
-    if note:
-        print(f"warning: {note}", file=sys.stderr)
-    if not move:
-        return folder
-    lock = None
-    if not legacy_lock_held:
-        lock = _try_legacy_lock()
-        if lock is False:
-            print(f"warning: an older Kinora (tapo-cameras) server is running, so the data folder {old} was not moved. "
-                  "Stop it, then start again. Using the old folder this time.", file=sys.stderr)
-            return old
-    try:
-        new.parent.mkdir(parents=True, exist_ok=True)
-        old.rename(new)   # atomic on the same volume
-    except OSError as e:
-        print(f"warning: could not move the old data folder {old} to {new} ({e.strerror or e}); "
-              "using the old folder this time", file=sys.stderr)
-        return old
-    finally:
-        if lock:
-            lock.close()
-    print(f"moved the data folder {old} to {new}", file=sys.stderr)
-    return new
-
-
-def legacy_lock_path():
-    """Single-instance lock file of the pre-rename code (user cache dir 'tapo-cameras')."""
-    return Path(user_cache_dir("tapo-cameras")) / "server.lock"
-
-
-def _try_legacy_lock():
-    """Take the legacy lock without waiting. -> an open handle (caller closes it), None when no old server can exist
-    (no lock file), False when an old server holds it. Creates nothing."""
-    path = legacy_lock_path()
-    if not path.exists():
-        return None
-    try:
-        f = open(path, "a+b")
-    except OSError:
-        return None
-    try:
-        os_lock(f, blocking=False)
-    except OSError:
-        f.close()
-        return False
-    return f
-
-
-def _plan_home():
-    """(home, move) without side effects. KINORA_HOME (or the old TAPOCAM_HOME) wins; the legacy/dev layout
-    (cameras.json in the repo) keeps using the repo; otherwise the per-user data dir from platformdirs."""
-    home = env("HOME")
-    if home:
-        return Path(home).expanduser(), False
-    if (ROOT / "cameras.json").exists():
-        return ROOT, False
-    folder, move, _ = plan_legacy_home(Path(user_data_dir("kinora")), Path(user_data_dir("tapo-cameras")))
-    return folder, move
+    """Environment setting KINORA_<name>, or `default`."""
+    value = os.environ.get("KINORA_" + name)
+    return default if value is None else value
 
 
 def resolve_home():
-    """Data directory: cameras.json, cache/, exports/, .env. Pure: it never moves or creates anything. While the
-    pre-rename folder still has to be moved this is the OLD folder; init() moves it and re-points the paths."""
-    return _plan_home()[0]
+    """Data directory: cameras.json, cache/, exports/, .env. Pure: it never moves or creates anything.
+    KINORA_HOME wins; the dev layout (cameras.json in the checkout) keeps using the checkout; otherwise the
+    per-user data dir from platformdirs."""
+    home = env("HOME")
+    if home:
+        return Path(home).expanduser()
+    if (ROOT / "cameras.json").exists():
+        return ROOT
+    return Path(user_data_dir("kinora"))
 
 
 HOME = resolve_home()
@@ -132,30 +39,6 @@ META = CACHE / "meta"
 EXPORTS = HOME / "exports"
 LIVE_ROOT = CACHE / "live"
 PLAY_ROOT = CACHE / "play"
-
-
-def _bind(home):
-    global HOME, CACHE, META, EXPORTS, LIVE_ROOT, PLAY_ROOT
-    HOME = home
-    CACHE = HOME / "cache"
-    META = CACHE / "meta"
-    EXPORTS = HOME / "exports"
-    LIVE_ROOT = CACHE / "live"
-    PLAY_ROOT = CACHE / "play"
-
-
-def init(legacy_lock_held=False):
-    """Entry-point startup: move the pre-rename data folder once (see migrate_legacy_home) and re-point HOME, CACHE,
-    META, EXPORTS, LIVE_ROOT, PLAY_ROOT and the camera tables. Call it before importing modules that copy those paths.
-    `legacy_lock_held`: the caller already holds the legacy instance lock (instance.acquire does). With an older server
-    running nothing is moved and the old folder is used. -> HOME."""
-    if env("HOME") or (ROOT / "cameras.json").exists():
-        return HOME
-    home = migrate_legacy_home(Path(user_data_dir("kinora")), Path(user_data_dir("tapo-cameras")), legacy_lock_held)
-    if home != HOME:
-        _bind(home)
-        reload_cameras()
-    return HOME
 
 
 def allowed_hosts(port):

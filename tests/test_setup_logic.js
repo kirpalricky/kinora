@@ -168,7 +168,7 @@ check('prerequisites: missing FFmpeg is said in plain words, with a How to insta
   && missing[0].fix === 'This computer is missing FFmpeg, a free video tool the app needs.' && missing[0].link.text === 'How to install');
 check('prerequisites: keyring not usable is not ok, file store is ok', missing[1].ok === false && F.prereqRows({ffmpeg: true, ffprobe: true, credential_store: {name: 'file', ok: false}})[1].ok === true);
 check('prerequisites: two rows, labelled Video tools and Saved passwords', missing.length === 2 && missing[0].label === 'Video tools' && missing[1].label === 'Saved passwords');
-check('prerequisites: no fix text names a file, a setting, an environment variable or an install command', !/TAPOCAM|settings\.json|brew|winget|apt|credential_store|keychain|keyring/i.test(JSON.stringify(missing)));
+check('prerequisites: no fix text names a file, a setting, an environment variable or an install command', !/KINORA_|settings\.json|brew|winget|apt|credential_store|keychain|keyring/i.test(JSON.stringify(missing)));
 
 // Playable rule (the timeline lists only verified and enabled cameras)
 check('playable: verified and enabled only', F.isPlayable({enabled: true, verified: true}) && !F.isPlayable({enabled: false, verified: true}) && !F.isPlayable({enabled: true, verified: false}) && !F.isPlayable(undefined));

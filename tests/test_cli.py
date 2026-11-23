@@ -144,8 +144,7 @@ class RunningUrl(unittest.TestCase):
     def test_recorded_port_is_read_back(self):
         with tempfile.TemporaryDirectory() as tmp:
             lock = Path(tmp) / "server.lock"
-            legacy = Path(tmp) / "legacy.lock"   # never the real legacy lock in the user cache dir
-            with mock.patch.object(instance, "lock_path", lambda: lock), mock.patch.object(instance, "legacy_lock_path", lambda: legacy), \
+            with mock.patch.object(instance, "lock_path", lambda: lock), \
                     mock.patch.object(instance, "_held", []), mock.patch.dict(os.environ, {}, clear=False):
                 os.environ.pop("KINORA_NO_INSTANCE_LOCK", None)
                 instance.acquire()

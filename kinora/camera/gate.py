@@ -329,7 +329,6 @@ def credentials_changed(cam, reset_auth=False):
 
 def _cli(argv):
     global BREAKER_F
-    config.init()   # same startup as the server: the one-time data folder move (never while an old server runs)
     BREAKER_F = config.META / "breaker.json"
     flags = {a for a in argv if a.startswith("--")}
     args = [a for a in argv if not a.startswith("--")]

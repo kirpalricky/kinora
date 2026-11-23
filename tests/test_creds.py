@@ -276,7 +276,7 @@ class Helper(CredsBase):
         text = out.getvalue()
         for secret in (CAM_PW, CLOUD_PW, "dotenv-secret-CCC"):
             self.assertNotIn(secret, text)
-        self.assertIn("OS keyring (service kinora or tapo-cameras): set", text)
+        self.assertIn("OS keyring (service kinora): set", text)
         self.assertIn("TAPO_CLOUD_PASS in environment: set", text)
         self.assertIn("TAPO_PASS in environment: not set", text)
         self.assertIn("TAPO_PASS in .env: set", text)

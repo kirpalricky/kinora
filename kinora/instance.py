@@ -10,7 +10,6 @@ from pathlib import Path
 
 from platformdirs import user_cache_dir
 
-from kinora import config
 from kinora.config import env as _env
 from kinora.oslock import os_lock as _os_lock
 
@@ -23,13 +22,6 @@ class AlreadyRunning(RuntimeError):
 
 def lock_path() -> Path:
     d = Path(user_cache_dir("kinora"))
-    d.mkdir(parents=True, exist_ok=True)
-    return d / "server.lock"
-
-
-def legacy_lock_path() -> Path:
-    """The pre-rename code's lock (user cache dir 'tapo-cameras'). Held too, so old and new servers exclude each other."""
-    d = Path(user_cache_dir("tapo-cameras"))
     d.mkdir(parents=True, exist_ok=True)
     return d / "server.lock"
 
@@ -72,32 +64,22 @@ def running_url(default_port=None):
 
 
 def acquire():
-    """Take the machine-wide locks (new and legacy) without waiting, or raise AlreadyRunning. Returns the new lock's
-    handle, or None when disabled by KINORA_NO_INSTANCE_LOCK=1."""
+    """Take the machine-wide lock without waiting, or raise AlreadyRunning. Returns the lock's handle, or None when
+    disabled by KINORA_NO_INSTANCE_LOCK=1."""
     global _held
     if _env("NO_INSTANCE_LOCK") == "1":
         return None
     path = lock_path()
     f = _take(path, f"another Kinora server is already running on this machine (lock: {path}). "
                     "Stop it first: two servers would double the camera login budget.")
-    try:
-        old = legacy_lock_path()
-        g = _take(old, "an older tapo-cameras server is still running on this machine. Stop it first, then start Kinora: "
-                       "two servers would double the camera login budget.")
-    except BaseException:
-        f.close()
-        raise
-    _held = [f, g]
+    _held = [f]
     return f
 
 
 def startup():
-    """Server entry point: take the locks, then run the one-time data folder move (config.init). Exits with a plain
-    sentence when another or an older server is running."""
+    """Server entry point: take the lock. Exits with a plain sentence when another server is running."""
     import sys
     try:
-        handle = acquire()
+        return acquire()
     except AlreadyRunning as e:
-        sys.exit(f"{e} Open {running_url()}" if "another Kinora" in str(e) else str(e))
-    config.init(legacy_lock_held=handle is not None)
-    return handle
+        sys.exit(f"{e} Open {running_url()}")

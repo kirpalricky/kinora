@@ -70,7 +70,7 @@ def _wait_then_open(port, url, opener=webbrowser.open, timeout=30.0):
 
 def start(args):
     from kinora import config, instance
-    instance.startup()   # one server per machine, then the one-time data folder move, before kinora.server is imported
+    instance.startup()   # one server per machine, before kinora.server is imported
     from kinora import server
     url = f"http://localhost:{config.PORT}"
     on_started = None

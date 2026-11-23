@@ -25,7 +25,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python server.py  # http://localhost:8080
 ```
 On first start the page opens a setup wizard: it asks for your TP-Link login and each camera's IP and camera account, then verifies each camera with a single login. Passwords are stored in the OS keyring (or an opt-in private file), never in `cameras.json`. Cameras can be edited afterwards under Settings (for example a changed IP).
-Your data (cameras, settings, cache, exports) lives in the per-user data folder (`KINORA_HOME` overrides it; the old `TAPOCAM_*` names are still accepted); `cameras.example.json` shows the file format. Read [docs/OPERATIONS.md](docs/OPERATIONS.md) before the first run: the cameras lock out for 30 minutes after repeated failed logins, and the wizard's first-run notes are there.
+Your data (cameras, settings, cache, exports) lives in the per-user data folder (`KINORA_HOME` overrides it); `cameras.example.json` shows the file format. Read [docs/OPERATIONS.md](docs/OPERATIONS.md) before the first run: the cameras lock out for 30 minutes after repeated failed logins, and the wizard's first-run notes are there.
 
 ## Layout
 ```
