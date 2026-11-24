@@ -208,7 +208,31 @@ dialog .row button.go{background:var(--c-accent);border-color:var(--c-accent);co
 #vwrap #ptz button:hover{background:rgba(255,255,255,.16)}
 #vwrap #ptz button:active{background:rgba(255,255,255,.4);transform:scale(.9)}
 #vwrap #ptz .c{margin:11px;background:rgba(255,255,255,.22);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
-#vwrap #ptzmsg{position:absolute;top:calc(var(--s-4) + 112px);right:var(--s-4);z-index:3;max-width:260px;padding:4px 9px;border-radius:7px;
+/* the pad's column: the saved-presets menu under the pad, the message under the menu (stacked, so they never overlap) */
+#vwrap #ptzside{position:absolute;top:calc(var(--s-4) + 124px);right:var(--s-4);z-index:3;width:104px;display:flex;flex-direction:column;align-items:center;gap:6px}
+#vwrap #ptzpre{display:none;flex-direction:column;align-items:center;opacity:.55;transition:opacity .2s;max-width:100%}
+#vwrap #ptzpre:hover,#vwrap #ptzpre:focus-within,#vwrap #ptzpre:has(#ptzpbtn[aria-expanded=true]){opacity:1}
+/* the pad and the presets control are one overlay: waking either one wakes both */
+#vwrap:has(#ptz:hover) #ptzpre,#vwrap:has(#ptz:focus-within) #ptzpre,#vwrap:has(#ptz:active) #ptzpre,
+#vwrap:has(#ptzpre:hover) #ptz,#vwrap:has(#ptzpre:focus-within) #ptz,#vwrap:has(#ptzpbtn[aria-expanded=true]) #ptz{opacity:1}
+#vwrap #ptzpbtn{display:inline-flex;align-items:center;justify-content:center;gap:5px;height:26px;padding:0 11px 0 9px;border-radius:999px;
+  background:rgba(18,18,18,.42);color:rgba(255,255,255,.92);border:1px solid rgba(255,255,255,.2);box-shadow:0 4px 14px rgba(0,0,0,.28);
+  font-size:11.5px;font-weight:500;letter-spacing:.01em;line-height:1;cursor:pointer;transition:background .12s,transform .08s;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);white-space:nowrap}
+#vwrap #ptzpbtn:active{background-image:linear-gradient(rgba(255,255,255,.4),rgba(255,255,255,.4));transform:scale(.96)}
+#vwrap #ptzpbtn::before{content:"";width:12px;height:12px;flex:none;background:currentColor;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21s-6-5.4-6-10a6 6 0 0 1 12 0c0 4.6-6 10-6 10z'/%3E%3Ccircle cx='12' cy='11' r='2'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21s-6-5.4-6-10a6 6 0 0 1 12 0c0 4.6-6 10-6 10z'/%3E%3Ccircle cx='12' cy='11' r='2'/%3E%3C/svg%3E") center/contain no-repeat}
+#vwrap #ptzpbtn:hover{background-image:linear-gradient(rgba(255,255,255,.16),rgba(255,255,255,.16))}
+#vwrap #ptzpbtn:disabled{cursor:default;white-space:normal;text-align:center;height:auto;min-height:28px;padding:5px 12px;border-radius:14px;max-width:190px}
+#vwrap #ptzpbtn:focus-visible,#vwrap #ptzplist button:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:1px}
+#vwrap #ptzplist{display:flex;flex-direction:column;gap:1px;margin-top:6px;width:128px;max-height:220px;overflow-y:auto;
+  padding:4px;box-sizing:border-box;border-radius:16px;background:rgba(18,18,18,.72);border:1px solid rgba(255,255,255,.2);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 6px 18px rgba(0,0,0,.3)}
+#vwrap #ptzplist[hidden]{display:none}
+#vwrap #ptzplist button{background:transparent;border:0;border-radius:8px;color:rgba(255,255,255,.92);font-size:11.5px;font-weight:500;text-align:center;padding:6px 8px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#vwrap #ptzplist button:hover{background:rgba(255,255,255,.16)}
+#vwrap #ptzmsg{max-width:220px;text-align:center;padding:4px 9px;border-radius:7px;
   background:rgba(140,25,25,.85);color:var(--c-on-media);font-size:12px}
 #vwrap #ptzmsg.info{background:rgba(0,0,0,.6);color:var(--c-on-media)}
 #vwrap #ptzmsg:empty{display:none}
@@ -571,6 +595,8 @@ main{container-type:inline-size}
   .pb-bar{height:52px;gap:var(--s-2)}
   #vwrap{border-radius:var(--r-md)}
   #vwrap #ptz{width:88px;height:88px}
+  #vwrap #ptzside{top:calc(var(--s-4) + 102px);width:88px}
+  #vwrap #ptzplist{width:112px}
   .pb-name,#addcam,#chips{display:none}
   .pb-camsel{display:inline-flex}
   .pb-switch{flex:0 1 auto;min-width:0}
@@ -640,7 +666,11 @@ main{container-type:inline-size}
   <div id="ptz" title="Pan / tilt the camera (hold to keep moving)">
     <button data-d="up" aria-label="Tilt up"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button><button data-d="left" aria-label="Pan left"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button><span class="c"></span><button data-d="right" aria-label="Pan right"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button><button data-d="down" aria-label="Tilt down"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
   </div>
-  <div id="ptzmsg"></div>
+  <div id="ptzside">
+    <div id="ptzpre"><button id="ptzpbtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="ptzplist" title="Go to one of the camera's saved presets (made in the Tapo app)">Presets</button>
+      <div id="ptzplist" role="menu" aria-label="Saved presets" hidden></div></div>
+    <div id="ptzmsg"></div>
+  </div>
 </div>
 <div id="ctl" class="pb-card">
 <div class="bar">

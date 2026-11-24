@@ -435,6 +435,26 @@ async def ptz(request):
     return web.json_response({"ok": True})
 
 
+async def ptz_presets(request):
+    """The camera's saved presets for the Live pad's menu (fetched on demand: one camera login)."""
+    cam = get_cam(request)
+    session.check_usable(cam)
+    return web.json_response(await ptz_service.presets(api, cam))
+
+
+async def ptz_preset(request):
+    if request.content_type != "application/json":
+        raise web.HTTPUnsupportedMediaType()
+    try:
+        body = await request.json()
+        cam, preset_id = CAMS[body["cam"]], body["id"]
+    except Exception:
+        raise web.HTTPBadRequest(text="expected JSON {cam, id}")
+    session.check_usable(cam)
+    await ptz_service.goto_preset(api, cam, preset_id)
+    return web.json_response({"ok": True})
+
+
 # ---- live view (RTSP -> HLS), independent of the API login budget -----------------------
 
 
@@ -609,6 +629,7 @@ REMOTE_ROUTES = {
     ("GET", "/api/play/status"), ("GET", "/play/{cam}/{sid}/{file}"), ("POST", "/api/live/stop"),
     ("POST", "/api/export"), ("GET", "/api/export/{id}"), ("POST", "/api/export/{id}/cancel"),
     ("GET", "/exports/{name}"), ("POST", "/api/ptz"),
+    ("GET", "/api/ptz/presets"), ("POST", "/api/ptz/preset"),
 }
 LOCAL_ONLY_ROUTES = {
     ("GET", "/api/setup/state"), ("POST", "/api/setup/account"), ("POST", "/api/setup/cameras"),
@@ -771,6 +792,8 @@ def make_app(background=True):
         web.get("/static/{name}", static_file),
         web.post("/api/export", export_start),
         web.post("/api/ptz", ptz),
+        web.get("/api/ptz/presets", ptz_presets),
+        web.post("/api/ptz/preset", ptz_preset),
         web.get("/api/export/{id}", export_status),
         web.post("/api/export/{id}/cancel", export_cancel),
         web.get("/exports/{name}", export_file),
