@@ -802,7 +802,9 @@ setInterval(pollStatus,10000); setTimeout(pollStatus,500);
 /* ---------- pan / tilt (cameras marked ptz in cameras.json) ---------- */
 let ptzTimer=null;
 function updatePtz(){ const on=!!camMeta[cam]?.ptz&&liveOn;   // the pad is only for the live view
-  $('ptz').style.display=on?'grid':'none'; if(!on){ $('ptzmsg').textContent=''; ptzStop(); } }
+  $('ptz').style.display=on?'grid':'none'; $('ptzpre').style.display=on?'flex':'none';
+  if(presetsSync()) paintPresets();
+  if(!on){ $('ptzmsg').textContent=''; ptzStop(); setPresetMenu(false); } }
 async function ptzStep(d){
   try{
     const r=await fetch('/api/ptz',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cam,dir:d})});
@@ -834,6 +836,73 @@ $('ptz').addEventListener('pointerdown',e=>{
 ['pointerup','pointerleave','pointercancel'].forEach(ev=>$('ptz').addEventListener(ev,ptzStop));
 addEventListener('pointerup',ptzStop);
 addEventListener('blur',ptzStop);
+
+/* ---------- saved presets: recall only (the camera's presets are made and deleted in the Tapo app) ---------- */
+// The menu sits under the pad. Its list belongs to presetCam and is fetched when the menu is first opened (one camera
+// login), then kept until the camera changes. presetFetching holds the camera whose list is on its way.
+let presetCam=null, presetList=null, presetFetching=null;
+function presetsSync(){   // a different camera: forget its list (true when that changed what is shown)
+  if(presetCam===cam) return false;
+  presetCam=cam; presetList=null; setPresetMenu(false); return true;
+}
+function setPresetMenu(open){
+  $('ptzplist').hidden=!open; $('ptzpbtn').setAttribute('aria-expanded',String(open));
+}
+function paintPresets(){
+  const b=$('ptzpbtn'), box=$('ptzplist');
+  box.replaceChildren();
+  b.disabled=false;
+  if(presetFetching===cam){ b.textContent='Loading presets…'; return; }
+  if(presetList===null){ b.textContent='Presets'; return; }
+  if(!presetList.length){ b.textContent='No presets (create in Tapo app)'; b.disabled=true; setPresetMenu(false); return; }
+  b.textContent='Presets';
+  presetList.forEach(p=>{ const it=document.createElement('button'); it.type='button'; it.setAttribute('role','menuitem');
+    it.dataset.id=p.id; it.textContent=p.name; box.appendChild(it); });
+}
+async function loadPresets(){   // true when the list for the camera on screen is ready
+  const my=cam;
+  if(presetList&&presetCam===my) return true;
+  if(presetFetching===my) return false;
+  presetFetching=my; paintPresets();
+  let list=null, msg='';
+  try{
+    const r=await fetch(`/api/ptz/presets?cam=${encodeURIComponent(my)}`);
+    if(r.ok) list=await r.json(); else msg=(await r.text()).trim();
+  }catch(e){ msg='Lost contact with the local server'; }
+  if(presetFetching===my) presetFetching=null;
+  if(my!==cam) return false;                 // the camera changed while we waited: that list is not for this one
+  if(list){ presetList=list; paintPresets(); return true; }
+  paintPresets(); const m=$('ptzmsg'); m.className=''; m.textContent=msg;
+  return false;
+}
+async function togglePresets(){
+  presetsSync();
+  if(!$('ptzplist').hidden){ setPresetMenu(false); return; }
+  if(presetList===null && !(await loadPresets())){ paintPresets(); return; }
+  paintPresets();
+  if(!presetList.length) return;               // no presets: the button says so and stays disabled
+  setPresetMenu(true);
+  const first=$('ptzplist').querySelector('button'); if(first) first.focus();   // keyboard users land on the first preset
+}
+async function ptzPreset(id, my){
+  try{
+    const r=await fetch('/api/ptz/preset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cam:my,id})});
+    if(r.ok){ $('ptzmsg').textContent=''; $('ptzmsg').className=''; return; }
+    if(r.status===429) return;               // pressed again too soon: not an error
+    $('ptzmsg').className=''; $('ptzmsg').textContent=(await r.text()).trim();
+  }catch(e){ $('ptzmsg').className=''; $('ptzmsg').textContent='Lost contact with the local server'; }
+}
+$('ptzpbtn').addEventListener('click',togglePresets);
+$('ptzplist').addEventListener('click',e=>{
+  const it=e.target.closest('button[data-id]'); if(!it) return;
+  setPresetMenu(false); $('ptzpbtn').focus(); ptzPreset(it.dataset.id, cam);
+});
+$('ptzside').addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&!$('ptzplist').hidden){ setPresetMenu(false); $('ptzpbtn').focus(); }
+});
+addEventListener('pointerdown',e=>{   // a click outside the menu closes it
+  if(!$('ptzplist').hidden&&!$('ptzpre').contains(e.target)) setPresetMenu(false);
+});
 
 
 /* ---------- theme: System (default) / Light / Dark ---------- */

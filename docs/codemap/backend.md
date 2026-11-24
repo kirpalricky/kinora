@@ -62,6 +62,8 @@ Dependencies go inward: `kinora/server.py` -> `kinora/services/*` -> `kinora/cam
 | POST `/api/play/start`, `/api/play/stop`, GET `/api/play/status`, GET `/play/{cam}/{sid}/{file}` | `play_*` | streamed playback |
 | POST `/api/export`, GET `/api/export/{id}`, POST `/api/export/{id}/cancel`, GET `/exports/{name}` | `export_*` | export jobs |
 | POST `/api/ptz` | `ptz` | pan/tilt step |
+| GET `/api/ptz/presets` | `ptz_presets` | saved presets list (recall only) |
+| POST `/api/ptz/preset` | `ptz_preset` | move to a saved preset |
 | GET `/api/setup/devices` | `devices_api.get_devices` | Other devices: `{sharing, listening, address, address_error, from_command_line, devices, pending, command_line}` (every device route answers this body) |
 | POST `/api/setup/devices` | `add_device` | `{ip, name?}`: allow a device (drops it from pending). 400 plain text on bad input |
 | GET `/api/setup/devices/qr` | `devices_api.address_qr` | optional `a` query (the address the page drew for; a different one answers 409 plain text): SVG (`image/svg+xml`, `no-store`, viewBox, no fixed size) QR code of the address the network socket listens on (segno, error M, border 4); 404 plain text when not listening. Local only |

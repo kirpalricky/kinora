@@ -63,6 +63,7 @@ No build step. `index.html` (markup, CSS, export dialog, setup container) loads 
 | `id`, `name`, `ip`, `enabled` | identity; `enabled:false` -> BadInput | `session.py` |
 | `auth` | `auto` (default: the app's own login, user `admin` and the TP-Link password, on TPAP and on the legacy transport; the camera account is not used), `admin_cloud` (the same login, for older cameras), or `cam_cloud` (user and camera password, for older cameras); anything else is BadInput | `session.build` |
 | `ptz` | pan/tilt buttons and `/api/ptz` | `services/ptz.py`, `app.js` |
+| `ptz presets` | saved presets menu under the pad (`/api/ptz/presets`, `/api/ptz/preset`) | `services/ptz.py`, `app.js` |
 | `p2p` | clip windows go through `p2p_media.fetch_window` (UDT) | `server.fetch_media` |
 | `stream_playback` | HLS playback; exposed as `stream` | `services/play.py`, `server.require_stream` |
 | `fast_forward` | allows key-frame scales; exposed as `ff` | `server.require_stream` |
