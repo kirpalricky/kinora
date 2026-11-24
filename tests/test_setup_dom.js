@@ -24,12 +24,26 @@ function fnSource(name) {
 // A minimal element: enough for h() (attributes, children, text, listeners) and for the tests to walk the tree.
 class Node {}
 class El extends Node {
-  constructor(tag) { super(); this.tagName = tag; this.attrs = {}; this.children = []; this.className = ''; this.textContent = ''; this.listeners = {}; }
+  constructor(tag) { super(); this.tagName = tag; this.attrs = {}; this.children = []; this.className = ''; this.textContent = ''; this.listeners = {}; this.dataset = {}; }
   setAttribute(k, v) { this.attrs[k] = String(v); }
   addEventListener(ev, fn) { this.listeners[ev] = fn; }
   append(...kids) { this.children.push(...kids); }
+  replaceChildren(...kids) { this.children = kids; }
   focus() { this.focused = true; }
   replaceWith(n) { this.replacedBy = n; }
+  // a dialog: showModal opens, close fires onclose (the browser fires it asynchronously; the stub does it at once)
+  showModal() { this.open = true; }
+  close() { if (!this.open) return; this.open = false; if (this.onclose) this.onclose(); }
+  // only the [data-focus="key"] form the page uses
+  querySelector(sel) {
+    const key = (sel.match(/data-focus="([^"]+)"/) || [])[1];
+    for (const c of this.children) {
+      if (!(c instanceof El)) continue;
+      if (key && c.attrs['data-focus'] === key) return c;
+      const hit = c.querySelector(sel); if (hit) return hit;
+    }
+    return null;
+  }
 }
 const walk = (node, visit) => { if (!(node instanceof El)) return; visit(node); node.children.forEach(c => walk(c, visit)); };
 const find = (root, pred) => { const out = []; walk(root, n => { if (pred(n)) out.push(n); }); return out; };
@@ -38,7 +52,7 @@ const find = (root, pred) => { const out = []; walk(root, n => { if (pred(n)) ou
 function load(names, withApp) {
   const ctx = {
     Node, renders: [], painted: [], reloaded: false,
-    document: {createElement: t => new El(t), querySelector: () => null},
+    document: {createElement: t => new El(t), querySelector: () => null, activeElement: null},
     SU: {sel: 'devices', view: 'settings', screen: 'list', edit: '', opener: '', errs: {}, saved: '', qr: false,
       devForm: {ip: '', name: ''}, devDirty: false, devErr: '', newRow: null, add: null, changed: false, playable: true, prevSel: '', dev: null},
     renderView() { ctx.renders.push(1); },
@@ -53,7 +67,8 @@ function load(names, withApp) {
   vm.runInContext(names.map(fnSource).join('\n'), ctx);
   return ctx;
 }
-const FUNCS = ['h', 'btn', 'cred', 'errAt', 'addressBox', 'qrDisclosure', 'startEdit', 'endEdit', 'openDeviceForm',
+const FUNCS = ['h', 'btn', 'cred', 'errAt', 'addressBox', 'openQr', 'qrOpen', 'closeQrIfStale', 'redrawDevices', 'devicesVisible',
+  'typingNow', 'startEdit', 'endEdit', 'openDeviceForm',
   'go', 'selectPane', 'closeSetup', 'setTheme', 'themeGroup', 'themeKeys', 'themeNow', 'themeChoices', 'themeWord'];
 const draft = {ip: '192.168.1.5', name: 'half typed'};
 const empty = d => d.ip === '' && d.name === '';
@@ -82,50 +97,71 @@ const empty = d => d.ip === '' && d.name === '';
   check('errors: other forms still start with a clean slate', Object.keys(c.SU.errs).length === 0);
 }
 
-// ---- the QR code: one card, Copy the only action in row 1, a native disclosure that follows SU.qr ----
+// ---- the QR code: a QR icon button and Copy in row 1; the full code in the "Open on your phone" dialog ----
 {
   const c = load(FUNCS, true);
   const url = 'http://192.168.1.5:80';
-  const dets = tree => find(tree, n => n.tagName === 'details');
   const buttonsIn = n => find(n, x => x.tagName === 'button');
-  c.SU.qr = false;
-  let tree = c.addressBox({address: url, address_error: null});
+  const tree = c.addressBox({address: url, address_error: null});
   const card = find(tree, n => n.className === 'su-card-s')[0];
-  check('qr: one address card holds the address row and the disclosure', !!card && card.children.length === 2);
-  const row1 = card.children[0];
-  check('qr: row 1 has Copy as its only button (data-focus copy-address)', buttonsIn(row1).length === 1 && buttonsIn(row1)[0].attrs['data-focus'] === 'copy-address' && buttonsIn(row1)[0].children.includes('Copy'));
-  let det = dets(tree)[0];
-  check('qr: collapsed by default when SU.qr is false (no open attribute)', !!det && det.attrs.open === undefined && det.className === 'su-more-d');
-  check('qr: the summary names the disclosure and carries the qr-toggle focus key', find(det, n => n.tagName === 'summary' && n.attrs['data-focus'] === 'qr-toggle').length === 1
-    && find(det, n => n.tagName === 'span' && n.textContent === 'QR code for a phone').length === 1);
-  check('qr: no aria-expanded or aria-controls anywhere (the native disclosure carries its own state)', find(tree, n => n.attrs['aria-expanded'] !== undefined || n.attrs['aria-controls'] !== undefined).length === 0);
-  const img = find(det, n => n.tagName === 'img')[0];
-  check('qr: the image is the route with the address as cache key, 160px, lazy, alt names the address', !!img
-    && img.attrs.src === '/api/setup/devices/qr?a=' + encodeURIComponent(url) && img.attrs.alt === 'QR code for ' + url
-    && img.attrs.width === '160' && img.attrs.height === '160' && img.attrs.loading === 'lazy');
-  check('qr: the body says what to do and the Wi-Fi rule, in the agreed classes', find(det, n => n.className === 'su-qr-do' && n.textContent === "Point your phone's camera at this code.").length === 1
-    && find(det, n => n.className === 'su-hint' && n.textContent === 'Your phone must be on this Wi-Fi. Then allow it under Waiting for approval.').length === 1);
-  const body = find(det, n => n.className === 'su-more-body su-qr')[0];
-  check('qr: nothing in the body is a tab stop (the summary is the only one)', !!body && find(body, n => ['button', 'a', 'input', 'select', 'textarea'].includes(n.tagName) || n.attrs.tabindex !== undefined).length === 0);
-  // SU.qr follows the native toggle (the browser fires toggle after open changes; the stub sets open and fires it)
-  det.open = true; det.listeners.toggle();
-  check('qr: opening the disclosure sets SU.qr (no re-render needed)', c.SU.qr === true);
-  det.open = false; det.listeners.toggle();
-  check('qr: closing it clears SU.qr', c.SU.qr === false);
-  c.SU.qr = true;
-  tree = c.addressBox({address: url, address_error: null});
-  det = dets(tree)[0];
-  check('qr: a redraw with SU.qr true renders the disclosure open', det.attrs.open !== undefined);
-  c.SU.qr = false;
-  tree = c.addressBox({address: url, address_error: null});
-  check('qr: a redraw with SU.qr false renders it closed', dets(tree)[0].attrs.open === undefined);
-  const img2 = find(dets(tree)[0], n => n.tagName === 'img')[0];
+  check('qr: one address card, one row (no disclosure, no details, no summary)', !!card && card.children.length === 1
+    && find(tree, n => n.tagName === 'details' || n.tagName === 'summary' || n.className === 'su-more-d').length === 0);
+  const acts = buttonsIn(card);
+  check('qr: row 1 has exactly two actions, the QR icon then Copy', acts.length === 2 && acts[0].attrs['data-focus'] === 'qr-open' && acts[1].attrs['data-focus'] === 'copy-address'
+    && acts[1].children.includes('Copy'));
+  check('qr: the QR button is icon only, labelled and titled "Show QR code", 36px like Copy (sm class)', acts[0].attrs['aria-label'] === 'Show QR code'
+    && acts[0].attrs.title === 'Show QR code' && acts[0].children.length === 1 && acts[0].children[0].tagName === 'svg' && acts[0].className.includes('sm'));
+  check('qr: no aria-expanded or aria-controls anywhere on the address row', find(tree, n => n.attrs['aria-expanded'] !== undefined || n.attrs['aria-controls'] !== undefined).length === 0);
+  c.addressBox({address: null, address_error: 'Kinora is not listening on your network.'});
+  check('qr: no address, no card', find(c.addressBox({address: null, address_error: 'x'}), n => n.className === 'su-card-s').length === 0);
+
+  // opening: a dialog (the one Settings dialog) with the image, the address, the hint and one Close
+  const root = new El('section'); root.append(tree); c.els.setup = root;
+  c.els.setupmain = new El('main');
+  c.openQr(url);
+  const dlg = c.els.suconfirm;
+  check('qr modal: opens as the Settings dialog with the address as its state', dlg.open === true && dlg.dataset.qr === url);
+  const img = find(dlg, n => n.tagName === 'img')[0];
+  check('qr modal: the image is the route with the address as cache key, 260px, alt names the address', !!img
+    && img.attrs.src === '/api/setup/devices/qr?a=' + encodeURIComponent(url) && img.attrs.alt === 'QR code for ' + url && img.attrs.width === '260');
+  check('qr modal: title "Open on your phone" (h2) and the address in mono', find(dlg, n => n.tagName === 'h2' && n.textContent === 'Open on your phone').length === 1
+    && find(dlg, n => n.className === 'su-qr-addr su-mono' && n.textContent === url).length === 1);
+  check('qr modal: the Wi-Fi line is the muted hint', find(dlg, n => n.className === 'su-hint' && n.textContent === 'Your phone must be on this Wi-Fi. Then allow it under Waiting for approval.').length === 1);
+  const closeBtns = find(dlg, n => n.tagName === 'button');
+  check('qr modal: exactly one button, a ghost Close, and it takes focus on open', closeBtns.length === 1 && closeBtns[0].children.includes('Close')
+    && closeBtns[0].className.includes('ghost') && closeBtns[0].focused === true);
+  // closing returns focus to the QR button (the opener by data-focus)
+  closeBtns[0].listeners.click();
+  check('qr modal: Close ends the dialog and focus returns to the QR button (qr-open)', dlg.open === false && acts[0].focused === true && dlg.dataset.qr === undefined);
+  // the image that does not load becomes the hint
+  c.openQr(url);
+  const img2 = find(c.els.suconfirm, n => n.tagName === 'img')[0];
   img2.listeners.error();
-  check('qr: when the image does not load, a hint replaces it (no broken picture)', !!img2.replacedBy && img2.replacedBy.className === 'su-hint'
+  check('qr modal: when the image does not load, a hint replaces it', !!img2.replacedBy && img2.replacedBy.className === 'su-hint'
     && img2.replacedBy.textContent === 'The QR code did not load. Type the address on your phone instead.');
-  tree = c.addressBox({address: null, address_error: 'Kinora is not listening on your network.'});
-  check('qr: no address, no card, no disclosure, and the state is reset', c.SU.qr === false && find(tree, n => n.className === 'su-card-s').length === 0
-    && dets(tree).length === 0 && find(tree, n => n.className === 'su-foot-note' && n.textContent === 'Kinora is not listening on your network.').length === 1);
+  c.els.suconfirm.close();
+
+  // the refresh: a stale code closes, a current one stays, and the page is not redrawn under an open code
+  c.openQr(url);
+  c.SU.dev = {address: 'http://192.168.1.77:80'};
+  c.closeQrIfStale();
+  check('refresh: the code closes when the address changes', c.els.suconfirm.open === false);
+  c.openQr(url);
+  c.SU.dev = {address: url};
+  c.closeQrIfStale();
+  check('refresh: the code stays open when the address is the same', c.els.suconfirm.open === true);
+  c.SU.dev = {address: null, sharing: false};
+  c.closeQrIfStale();
+  check('refresh: the code closes when sharing turns off (no address)', c.els.suconfirm.open === false);
+  c.openQr(url);
+  c.SU.devDirty = true; c.SU.view = 'settings'; c.SU.sel = 'devices'; c.SU.dev = {address: url};
+  const before = c.renders.length;
+  c.redrawDevices();
+  check('refresh: a changed list does not redraw the page while the code is open (no focus taken)', c.renders.length === before && c.SU.devDirty === true);
+  c.els.suconfirm.close();
+  c.redrawDevices();
+  check('refresh: the page redraws once the code is closed', c.renders.length === before + 1 && c.SU.devDirty === false);
+  // the dialog's Escape is native (the setup key handler leaves it alone while suconfirm is open): see the static checks
 }
 
 // ---- Theme: the page's own choice is used; with app.js missing, Settings still renders (Auto) and can save ----

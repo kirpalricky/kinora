@@ -309,7 +309,7 @@ function deviceLabel(d) { return d.name || d.ip; }
 // that shows "Saved" once. SU.vs: this page's last Verify result per camera. SU.deadline and SU.span: sign-in waits.
 const SU = {state: null, playable: false, view: 'prepare', changed: false, busy: '', vs: {}, deadline: {}, span: {},
   authStop: '', add: null, uid: 0, sel: '', prevSel: '', newRow: null, edit: '', opener: '', errs: {}, saved: '',
-  screen: 'list', loadErr: '', dev: null, devForm: {ip: '', name: ''}, devDirty: false, devErr: '', qr: false};
+  screen: 'list', loadErr: '', dev: null, devForm: {ip: '', name: ''}, devDirty: false, devErr: ''};
 const byId = id => document.getElementById(id);
 const SVG_NS = 'http://www.w3.org/2000/svg';
 // Icons: 20px on a 24 grid, stroke currentColor, no fill. Built with createElementNS (h() cannot make SVG).
@@ -325,6 +325,8 @@ const SU_ICONS = {
   down: [['path', {d: 'M6 10l6 6 6-6'}]],
   pencil: [['path', {d: 'M4 20h4L19 9l-4-4L4 16v4z'}]],
   mark: [['rect', {class: 'su-mk-b', x: 3, y: 3, width: 14, height: 14, rx: 4}], ['rect', {class: 'su-mk-f', x: 7, y: 7, width: 14, height: 14, rx: 4}]],
+  qr: [['rect', {x: 3, y: 3, width: 7, height: 7, rx: 1}], ['rect', {x: 14, y: 3, width: 7, height: 7, rx: 1}], ['rect', {x: 3, y: 14, width: 7, height: 7, rx: 1}],
+    ['path', {d: 'M14 14h2v2h-2zM18 14h3M14 18v3M18 18h3v3h-3z'}]],
 };
 const SU_CHECKLIST = [
   ['Turn on Third-Party Compatibility', 'Me → Third-Party Services.'],
@@ -1412,6 +1414,7 @@ async function loadDevices() {
   const r = await api('GET', '/api/setup/devices');
   if (r.ok && applyDevices(r.data)) {
     SU.devErr = '';
+    closeQrIfStale();
     if (devicesKey(SU.dev) !== before) SU.devDirty = true;
   } else {
     const msg = r.ok ? 'The list did not load. Try again.' : r.text;
@@ -1422,7 +1425,7 @@ async function loadDevices() {
 }
 // Redraws the pane when the list changed, unless a text field has focus (the change waits for the next tick).
 function redrawDevices() {
-  if (!SU.devDirty || !devicesVisible() || typingNow()) return;
+  if (!SU.devDirty || !devicesVisible() || typingNow() || qrOpen()) return;
   SU.devDirty = false;
   renderView();
 }
@@ -1483,29 +1486,44 @@ async function setSharing(on) {
 }
 function addressBox(d) {
   const kids = [];
-  if (!d.address) SU.qr = false;   // the QR code is of the address the network socket listens on: no address, no card
   if (d.address) kids.push(h('div', {class: 'su-card-s'},
     cred('Open this on the other computer', h('span', {class: 'su-mono', text: d.address}),
-      btn('Copy', () => copyAddress(d.address), 'ghost sm', {'data-focus': 'copy-address'}), 'su-cred-addr'),
-    qrDisclosure(d.address)));
+      [h('button', {type: 'button', class: 'su-btn ghost sm su-icon-only', 'aria-label': 'Show QR code', title: 'Show QR code',
+        'data-focus': 'qr-open', onclick: () => openQr(d.address)}, icon('qr', 'su-btn-ico')),
+       btn('Copy', () => copyAddress(d.address), 'ghost sm', {'data-focus': 'copy-address'})], 'su-cred-addr')));
   if (d.address_error) kids.push(h('p', {class: 'su-foot-note', text: d.address_error}));
   kids.push(errAt('address'));
   return h('div', {class: 'su-stack'}, kids);
 }
-// The QR code for a phone: a native disclosure under the address, open exactly when SU.qr says so. The toggle event keeps
-// SU.qr in step with the native state (no re-render). Nothing in the body is a tab stop.
-function qrDisclosure(address) {
+// "Open on your phone": the QR code in the one Settings dialog (suconfirm). dataset.qr holds the address it shows.
+// Escape and Close end it (native); focus returns to the QR button. The 5 s refresh closes it when the address changes
+// or sharing turns off (closeQrIfStale), and never redraws the page under it (redrawDevices).
+function openQr(address) {
+  const dlg = byId('suconfirm');
   const img = h('img', {class: 'su-qr-img', src: '/api/setup/devices/qr?a=' + encodeURIComponent(address), alt: 'QR code for ' + address,
-    width: '160', height: '160', loading: 'lazy'});
+    width: '260', height: '260'});
   img.addEventListener('error', () => img.replaceWith(h('p', {class: 'su-hint', text: 'The QR code did not load. Type the address on your phone instead.'})));
-  const det = h('details', {class: 'su-more-d', open: !!SU.qr},
-    h('summary', {'data-focus': 'qr-toggle'}, h('span', {text: 'QR code for a phone'}), icon('chevron', 'su-chev')),
-    h('div', {class: 'su-more-body su-qr'}, img,
-      h('div', {class: 'su-qr-text'},
-        h('p', {class: 'su-qr-do', text: "Point your phone's camera at this code."}),
-        h('p', {class: 'su-hint', text: 'Your phone must be on this Wi-Fi. Then allow it under Waiting for approval.'}))));
-  det.addEventListener('toggle', () => { SU.qr = det.open; });
-  return det;
+  const close = btn('Close', () => dlg.close(), 'ghost', {'data-focus': 'qr-close'});
+  dlg.dataset.qr = address;
+  dlg.replaceChildren(h('div', {class: 'su-qr-modal'},
+      h('h2', {class: 'su-dlg-t', id: 'suconfirmt', text: 'Open on your phone', tabindex: '-1'}),
+      img,
+      h('p', {class: 'su-qr-addr su-mono', text: address}),
+      h('p', {class: 'su-hint', text: 'Your phone must be on this Wi-Fi. Then allow it under Waiting for approval.'})),
+    h('div', {class: 'su-dlg-act'}, close));
+  dlg.onclose = () => {
+    delete dlg.dataset.qr;
+    const t = byId('setup').querySelector('[data-focus="qr-open"]') || byId('setupmain').querySelector('h2');
+    if (t) t.focus();
+  };
+  dlg.showModal();
+  close.focus();
+}
+function qrOpen() { const dlg = byId('suconfirm'); return !!dlg.open && dlg.dataset.qr !== undefined; }
+// After a refresh: the open code is stale when the address moved or sharing is off (no address): close it.
+function closeQrIfStale() {
+  const d = SU.dev || {}, dlg = byId('suconfirm');
+  if (qrOpen() && (!d.address || d.address !== dlg.dataset.qr)) dlg.close();
 }
 async function copyAddress(addr) {
   delete SU.errs.address;

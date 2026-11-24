@@ -362,15 +362,11 @@ details[open]>summary>.su-chev{transform:rotate(90deg)}
 /* the one disclosure of a camera pane and the reachability details of a wizard row */
 .su-more-d{border-top:1px solid var(--c-line)}
 .su-more-d>.su-more-body{padding:0 var(--s-5) var(--s-4)}
-/* the QR code for a phone: a disclosure inside the address card (after Copy); the code is 160px on the white token (--c-qr) */
-.su-card-s>.su-more-d>summary{min-height:48px;padding:6px var(--s-5)}
-.su-card-s>.su-more-d>summary:focus-visible{outline-offset:-2px;border-radius:0 0 var(--r-lg) var(--r-lg)}
-.su-card-s>.su-more-d[open]>summary:focus-visible{border-radius:0}
-.su-card-s>.su-more-d>.su-more-body{padding:0 var(--s-5) var(--s-5)}
-.su-qr{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-4) var(--s-5);max-width:none}
-.su-qr-img{display:block;flex:none;width:160px;height:160px;background:var(--c-qr);border:1px solid var(--c-line);border-radius:var(--r-md)}
-.su-qr-text{display:flex;flex-direction:column;gap:var(--s-1);flex:1 1 200px;min-width:0}
-.su-qr-do{font-size:15px;line-height:22px;color:var(--c-text)}
+/* QR code: an icon button in the address row (36px, as Copy) and the full code in the "Open on your phone" dialog */
+.su-btn.su-icon-only{--su-pad-x:0;width:36px}
+.su-qr-modal{display:flex;flex-direction:column;align-items:center;gap:var(--s-4);text-align:center}
+.su-qr-img{display:block;width:260px;max-width:100%;height:auto;background:var(--c-qr);border:1px solid var(--c-line);border-radius:var(--r-md)}
+.su-qr-addr{max-width:100%;overflow-x:auto;white-space:nowrap;font-size:15px;line-height:22px;color:var(--c-text)}
 /* cards: wizard rows, verify cards, and the Settings boxes (saved-credential rows inside) */
 .su-card-s{display:flex;flex-direction:column;min-width:0;border:1px solid var(--c-line);border-radius:var(--r-lg);background:var(--c-surface);overflow-wrap:anywhere}
 .su-pad{padding:var(--s-5);gap:var(--s-4)}
@@ -483,7 +479,7 @@ details[open]>summary>.su-chev{transform:rotate(90deg)}
   .su-pane{max-width:none}
   .su-cred{grid-template-columns:minmax(0,1fr);gap:var(--s-1);padding:14px 16px}
   .su-cred-a{justify-content:flex-start}
-  .su-card-s>.su-more-d>summary,.su-card-s>.su-more-d>.su-more-body{padding-inline:16px}
+  .su-qr-addr{font-size:13px;line-height:20px}
   .su-cred-a>.su-btn.ghost:first-child{margin-inline-start:-13px}
   .su-row{min-height:56px}
   .su-cred-wide{grid-template-columns:minmax(0,1fr)}
@@ -711,4 +707,4 @@ main{container-type:inline-size}
 </dialog>
 <script src="/static/hls.min.js"></script>
 <script src="/static/app.js?v=69"></script>
-<script src="/static/setup.js?v=17"></script></body></html>
+<script src="/static/setup.js?v=18"></script></body></html>
