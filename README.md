@@ -15,7 +15,9 @@ Nothing leaves the LAN and no TP-Link cloud session is used for video.
 pipx install kinora-cams   # placeholder distribution name: the final PyPI name is not checked yet
 kinora                     # starts the server and opens http://localhost:8080 on the setup wizard
 ```
-Kinora needs FFmpeg on your PATH (macOS: `brew install ffmpeg`; Debian/Ubuntu: `sudo apt install ffmpeg`). Run `kinora doctor` for a plain checklist (Python, data folder, ffmpeg, keyring, port); it never contacts a camera. Options: `--port N`, `--no-browser`, `--home PATH`, `--version`.
+Kinora needs FFmpeg on your PATH (macOS: `brew install ffmpeg`; Debian/Ubuntu: `sudo apt install ffmpeg`). Run `kinora doctor` for a plain checklist (Python, data folder, ffmpeg, keyring, port); it never contacts a camera. Options: `--port N`, `--no-browser`, `--home PATH`, `--allow IP`, `--host ADDR`, `--version`.
+
+**Use one server from other laptops:** run `kinora --allow 192.168.1.20 --allow 192.168.1.21` (IPs or ranges like `192.168.1.0/24`, repeatable; or `KINORA_ALLOW=ip,ip`) on the computer that can reach the cameras, then open `http://<that computer's IP>:8080` on an allowed laptop. It then listens on your network; devices not on the list get 403. Allowed devices can watch, play, export and move the camera, but cannot open setup or change cameras and passwords: that stays on the server's own computer. There is no login and traffic is plain HTTP, so use it on a network you trust.
 
 **Windows:** run Kinora under [WSL](https://learn.microsoft.com/windows/wsl/install) (`wsl --install` in an admin PowerShell, then open the Ubuntu shell) and follow the Linux steps above (`sudo apt install ffmpeg`, `pipx install ...`, `kinora`). Open http://localhost:8080 in your Windows browser. Your cameras must be reachable from WSL: if they are not, enable WSL's mirrored networking (`networkingMode=mirrored` in `%UserProfile%\.wslconfig`, then `wsl --shutdown`).
 

@@ -52,7 +52,7 @@ The owner's watch-list for the first real use of the wizard on a new data folder
 - Note any model-mismatch or different-device warning on the page. It is a warning: nothing is changed automatically.
 
 ## Starting the server
-Installed: `kinora` (opens a browser tab; `--no-browser`, `--port N`, `--home PATH`; `kinora doctor` checks Python, data folder, ffmpeg/ffprobe, keyring and port without contacting a camera; `KINORA_NO_BROWSER=1` also skips the tab). From a checkout: `.venv/bin/python server.py` (a shim for `kinora/server.py`). Then http://localhost:8080 (localhost only; the server checks Host and Sec-Fetch-Site).
+Installed: `kinora` (opens a browser tab; `--no-browser`, `--port N`, `--home PATH`; `kinora doctor` checks Python, data folder, ffmpeg/ffprobe, keyring and port without contacting a camera; `KINORA_NO_BROWSER=1` also skips the tab). From a checkout: `.venv/bin/python server.py` (a shim for `kinora/server.py`). Then http://localhost:8080 (localhost only by default; the server checks Host and Sec-Fetch-Site). `--allow IP[/BITS]` (repeatable, or `KINORA_ALLOW`) lets those devices in from the network and makes the server listen on 0.0.0.0 (`--host`/`KINORA_HOST` overrides); allowed devices cannot use `/api/setup/*` or change cameras. Plain HTTP, no login: trusted networks only.
 
 Only one server runs per machine. A second start (even from another checkout or with another `KINORA_HOME`) exits with "another Kinora server is already running on this machine" and the URL of the running one (the running server writes its port into `server.lock`). The lock is a file `server.lock` in the user cache dir, held until the server exits, so a crash never leaves it stuck. `KINORA_NO_INSTANCE_LOCK=1` disables it; that is for tests only.
 

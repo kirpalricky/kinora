@@ -4,6 +4,7 @@
 them at import time), so every import of the heavy modules is lazy.
 """
 import argparse
+import ipaddress
 import os
 import shutil
 import socket
@@ -25,6 +26,10 @@ def build_parser():
     p = argparse.ArgumentParser(prog="kinora", description="Kinora: scrubbable playback of Tapo camera SD cards, in your browser.")
     p.add_argument("command", nargs="?", choices=["doctor"], help="doctor: check this computer is ready (no camera is contacted)")
     p.add_argument("--port", type=int, help="port to listen on (default 8080, or KINORA_PORT)")
+    p.add_argument("--allow", action="append", metavar="IP[/BITS]",
+                   help="let another device use this server: its IP or a range such as 192.168.1.0/24 (repeatable, or KINORA_ALLOW); "
+                        "listens on the network. Other devices can watch but not change settings")
+    p.add_argument("--host", help="address to listen on (default 127.0.0.1, or 0.0.0.0 with --allow, or KINORA_HOST)")
     p.add_argument("--no-browser", action="store_true", help="do not open a browser tab on start")
     p.add_argument("--home", metavar="PATH", help="data folder (default: the per-user data folder, or KINORA_HOME)")
     p.add_argument("--version", action="store_true", help="print the version and exit")
@@ -37,6 +42,15 @@ def apply_env(args, environ=os.environ):
         if not 0 < args.port < 65536:
             sys.exit("--port must be between 1 and 65535")
         environ["KINORA_PORT"] = str(args.port)
+    if args.allow:
+        for a in args.allow:   # validated here: kinora.config must not be imported before the environment is complete
+            try:
+                ipaddress.ip_network(a, strict=False)
+            except ValueError:
+                sys.exit(f"--allow: not an IP address or range: {a!r}")
+        environ["KINORA_ALLOW"] = ",".join(args.allow)
+    if args.host:
+        environ["KINORA_HOST"] = args.host
     if args.home:
         environ["KINORA_HOME"] = str(Path(args.home).expanduser())
 
@@ -78,6 +92,8 @@ def start(args):
         def on_started():
             threading.Thread(target=_wait_then_open, args=(config.PORT, url), daemon=True).start()
     print(f"Kinora {config.VERSION}: {url}  (Ctrl+C to stop)", flush=True)
+    if config.ALLOW:
+        print(f"Other devices allowed: {', '.join(str(n) for n in config.ALLOW)} (listening on {config.HOST}:{config.PORT})", flush=True)
     server.main(on_started=on_started)
 
 

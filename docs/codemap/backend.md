@@ -1,6 +1,6 @@
 # Backend
 
-Python 3 + aiohttp, bound to 127.0.0.1:`config.PORT` (env `KINORA_PORT`, default 8080). pytapo 3.4.34 (pinned) does the camera calls.
+Python 3 + aiohttp, bound to `config.HOST`:`config.PORT` (env `KINORA_HOST`, default 127.0.0.1; 0.0.0.0 when `KINORA_ALLOW`/`--allow` lists devices; `config.ALLOW` = networks, `local_only` in server.py refuses other peers, other Host names, and setup/camera-settings routes from non-loopback peers; tests/test_allow.py), port env `KINORA_PORT`, default 8080. pytapo 3.4.34 (pinned) does the camera calls.
 Dependencies go inward: `kinora/server.py` -> `kinora/services/*` -> `kinora/camera/*` -> `kinora/{config,errors,creds,health}`.
 
 ## Core files

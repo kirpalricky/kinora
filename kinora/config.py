@@ -41,6 +41,23 @@ LIVE_ROOT = CACHE / "live"
 PLAY_ROOT = CACHE / "play"
 
 
+def parse_allow(text):
+    """Comma separated IPs / CIDR ranges of the other devices allowed to use this server (KINORA_ALLOW) -> list of networks.
+    Raises ValueError naming the bad entry. Loopback is always allowed and needs no entry."""
+    nets = []
+    for part in (text or "").replace(" ", ",").split(","):
+        if part:
+            try:
+                nets.append(ipaddress.ip_network(part, strict=False))
+            except ValueError:
+                raise ValueError(f"not an IP address or range: {part!r}") from None
+    return nets
+
+
+ALLOW = parse_allow(env("ALLOW", ""))
+HOST = env("HOST") or ("0.0.0.0" if ALLOW else "127.0.0.1")   # listening on the network only when devices are allowed (or asked for)
+
+
 def allowed_hosts(port):
     """Host header values accepted by the local-only middleware."""
     return {f"127.0.0.1:{port}", f"localhost:{port}"}

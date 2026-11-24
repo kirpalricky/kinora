@@ -19,10 +19,12 @@ Design rules (these exist because cameras lock us out after repeated logins):
 import asyncio
 import datetime
 import errno
+import ipaddress
 import json
 import os
 import re
 import shutil
+import socket
 import sys
 import time
 import uuid
@@ -601,16 +603,58 @@ CSP = ("default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline';
        "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 
 
+def _peer_ip(request):
+    try:
+        ip = ipaddress.ip_address(request.remote or "")
+    except ValueError:
+        return None
+    return getattr(ip, "ipv4_mapped", None) or ip
+
+
+def _is_admin_route(request):
+    """Setup and camera settings: only the computer the server runs on may change them (or read the setup state)."""
+    p = request.path
+    return p.startswith("/api/setup/") or (p.startswith("/api/cameras/") and request.method != "GET")
+
+
+def _host_ok(host, remote):
+    """Loopback clients: localhost / 127.0.0.1 on our port. Allowed devices: also this machine's IP address(es) or
+    machine name on our port; any other name is refused, so a rebound DNS name cannot reach the server."""
+    if host in ALLOWED_HOSTS:
+        return True
+    if remote:
+        name, _, port = (host or "").rpartition(":")
+        if port != str(config.PORT):
+            return False
+        try:
+            ipaddress.ip_address(name.strip("[]"))
+            return True
+        except ValueError:
+            return name.lower() in MACHINE_NAMES
+    return False
+
+
+MACHINE_NAMES = {n.lower() for n in (socket.gethostname(), socket.gethostname().split(".")[0] + ".local", socket.getfqdn())}
+
+
 @web.middleware
 async def local_only(request, handler):
-    """Block DNS-rebinding / cross-site reads of the (private) camera video."""
-    if request.headers.get("Host") not in ALLOWED_HOSTS:
+    """Block DNS-rebinding / cross-site reads of the (private) camera video, and devices that are not allowed."""
+    ip = _peer_ip(request)
+    remote = not (ip and ip.is_loopback)
+    if remote:
+        if not (ip and any(ip in net for net in config.ALLOW)):
+            raise web.HTTPForbidden(text="this device is not allowed: add its address with --allow on the server")
+        if _is_admin_route(request):
+            raise web.HTTPForbidden(text="settings can only be changed on the computer running Kinora")
+    host = request.headers.get("Host")
+    if not _host_ok(host, remote):
         raise web.HTTPForbidden(text="bad Host header")
     if request.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none"):
         raise web.HTTPForbidden(text="cross-site request refused")
     if request.method in STATE_CHANGING:
         # browsers always send Origin on fetch POST; a missing or foreign one is refused (no fallback to Sec-Fetch-Site)
-        if request.headers.get("Origin") not in ALLOWED_ORIGINS:
+        if request.headers.get("Origin") not in ALLOWED_ORIGINS | {f"http://{host}"}:
             raise web.HTTPForbidden(text="missing or foreign Origin refused")
         route = getattr(request.match_info.route, "resource", None)
         if request.content_type != "application/json" and getattr(route, "canonical", None) not in NO_BODY_ROUTES:
@@ -696,7 +740,7 @@ def main(on_started=None):
     if on_started:
         on_started()
     try:
-        web.run_app(app, host="127.0.0.1", port=config.PORT)
+        web.run_app(app, host=config.HOST, port=config.PORT)
     except OSError as e:
         if e.errno != errno.EADDRINUSE:
             raise
