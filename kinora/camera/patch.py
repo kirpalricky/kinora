@@ -32,6 +32,18 @@ def _guard_login(orig):
     return wrapper
 
 
+def _guard_probe(orig):
+    """Wrap a pytapo discovery probe (sent from the Tapo() constructor, outside the gated login): it counts towards
+    the camera's lockout, so it is counted by the gate and refused for an unknown, blocked or disabled camera."""
+    def wrapper(host, *a, **kw):
+        cam = config.CAM_BY_IP.get(host)
+        if cam is None:   # fail closed, like the login guard
+            raise gate.GateRefused(f"{gate.MARK}probe of unknown host {host!r} refused: it is not in cameras.json")
+        gate.note_probe(cam)
+        return orig(host, *a, **kw)
+    return wrapper
+
+
 async def _refuse_klap_login(self, *a, **kw):
     """Replaces pytapo's KLAP login: this app never logs in over KLAP, so the login is refused before any request."""
     raise gate.GateRefused(f"{gate.MARK}klap login is not supported by this app")
@@ -54,6 +66,17 @@ def install():
         if not callable(getattr(owner, name, None)):
             raise RuntimeError(f"pytapo's internals changed ({owner.__name__}.{name} is missing): "
                                "the login gate cannot be installed, so the server refuses to run ungated")
+    import pytapo   # the constructor calls these two by their package-level names
+    for name in ("discover_login", "rejects_legacy_login"):
+        if not callable(getattr(pytapo, name, None)):
+            raise RuntimeError(f"pytapo's internals changed (pytapo.{name} is missing): "
+                               "the login gate cannot be installed, so the server refuses to run ungated")
+        probe = getattr(pytapo, name)
+        if not getattr(probe, "_kinora_guarded", False):
+            wrapped = _guard_probe(probe)
+            wrapped._kinora_guarded = True
+            setattr(pytapo, name, wrapped)
+
     for owner, name in ((Tpap, "_login"), (pyTapo, "_refreshStok")):
         current = getattr(owner, name)
         if getattr(current, "_kinora_guarded", False):

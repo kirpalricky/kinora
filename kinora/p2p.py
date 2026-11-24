@@ -64,6 +64,8 @@ def punch(sock, sid, cam, timeout=8.0):
         except ConnectionResetError:   # ICMP unreachable from an earlier send (Windows): keep punching
             time.sleep(0.05)
             continue
+        if addr[0] != cam[0]:   # only the camera answers the probe: a spoofed reply from another host is ignored
+            continue
         if data.rstrip(b"\0") == b"2" + sid.encode()[1:]:
             sock.sendto(data.rstrip(b"\0"), addr)
             sock.setblocking(False)

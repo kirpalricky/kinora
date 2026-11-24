@@ -19,6 +19,9 @@ from kinora import config, health
 # ---- login gate (persisted) -------------------------------------------------------------
 MIN_LOGIN_GAP = 180        # seconds between logins to one camera
 MAX_LOGINS_PER_HOUR = 4
+MAX_PROBES_PER_HOUR = 6      # pytapo discovery probes (they count towards the camera's lockout too): 3 cold builds
+PROBES_PER_COLD_BUILD = 2   # discover_login + rejects_legacy_login, when no transport is stored
+MAX_CAMERA_WAIT = 7200     # longest camera-reported suspension we believe, seconds
 SAFETY_MARGIN = 120        # extra seconds added to a camera-reported suspension
 GENERIC_BACKOFF = 300      # after a failed login that is not a suspension / bad credentials
 AUTH_RETRY_BLOCK = 3600    # "Invalid authentication" from a camera that has logged in before
@@ -54,7 +57,7 @@ def gate_key(cam):
 
 
 def _blank():
-    return {"blocked_until": 0, "logins": [], "disabled": None, "fails": 0}
+    return {"blocked_until": 0, "logins": [], "disabled": None, "fails": 0, "probes": []}
 
 
 def _load_state(extra=()):
@@ -103,6 +106,7 @@ def _merge(a, b):
     merged["fails"] = max(a.get("fails", 0), b.get("fails", 0))
     merged["live_disabled"] = a.get("live_disabled") or b.get("live_disabled")
     merged["recent_fails"] = sorted(set(a.get("recent_fails", [])) | set(b.get("recent_fails", [])))
+    merged["probes"] = sorted(set(a.get("probes", [])) | set(b.get("probes", [])))
     if a.get("transport") or b.get("transport"):
         merged["transport"] = a.get("transport") or b.get("transport")
     return merged
@@ -159,10 +163,14 @@ def _check(cam, now):
         raise GateRefused(f"{MARK}{cam['name']}: waiting {int(s['blocked_until'] - now)} s before the next login")
 
 
-def _check_rate(cam, now, s):
+def _check_rate(cam, now, s, extra=0):
+    """extra: further camera hits this attempt will make (pytapo's discovery probes) that must also fit the budget."""
     if s["logins"] and now - s["logins"][-1] < MIN_LOGIN_GAP:
         raise GateRefused(f"{MARK}{cam['name']}: last login was {int(now - s['logins'][-1])} s ago, "
                           f"waiting {int(MIN_LOGIN_GAP - (now - s['logins'][-1]))} s")
+    probes = [t for t in s.get("probes", []) if now - t < 3600]
+    if len(probes) + extra > MAX_PROBES_PER_HOUR:   # a cold build sends its discovery probes before its login
+        raise GateRefused(f"{MARK}{cam['name']}: discovery probe budget for this hour used up")
     if len(s["logins"]) >= MAX_LOGINS_PER_HOUR:
         raise GateRefused(f"{MARK}{cam['name']}: login budget for this hour used up")
 
@@ -176,7 +184,8 @@ def precheck(cam):
         s = st(cam)
         s["logins"] = [t for t in s["logins"] if now - t < 3600]
         _check(cam, now)
-        _check_rate(cam, now, s)
+        # no stored transport: the Tapo() constructor sends 2 discovery probes before the login (see note_probe)
+        _check_rate(cam, now, s, extra=0 if s.get("transport") else PROBES_PER_COLD_BUILD)
 
 
 def gate(cam, count_only=False):
@@ -190,6 +199,22 @@ def gate(cam, count_only=False):
         if not count_only:
             _check_rate(cam, now, s)
         s["logins"].append(now)  # count the attempt before making it
+        _save()
+
+
+def note_probe(cam):
+    """Allow (and count) one of pytapo's discovery probes (discover_login, rejects_legacy_login), which run in the
+    Tapo() constructor outside the gated login but count towards the camera's lockout. Refused when the camera is
+    blocked or disabled. They have their own hourly budget (MAX_PROBES_PER_HOUR), not the gap between logins."""
+    with _gate_lock():
+        now = time.time()
+        _reload([cam])
+        s = st(cam)
+        s["probes"] = [t for t in s.get("probes", []) if now - t < 3600]
+        _check(cam, now)
+        if len(s["probes"]) >= MAX_PROBES_PER_HOUR:
+            raise GateRefused(f"{MARK}{cam['name']}: discovery probe budget for this hour used up")
+        s["probes"].append(now)   # count the probe before making it
         _save()
 
 
@@ -229,7 +254,7 @@ def note_login_failure(cam, e):
         s["recent_fails"] = [t for t in s.get("recent_fails", []) if now - t < FAIL_WINDOW] + [now]
         m = re.search(r"Try again in (\d+) seconds", msg)
         if m:
-            s["blocked_until"] = now + int(m.group(1)) + SAFETY_MARGIN
+            s["blocked_until"] = now + min(int(m.group(1)), MAX_CAMERA_WAIT) + SAFETY_MARGIN   # a camera (or a fake one) cannot park us for days
         elif "Invalid authentication" in msg:
             if s.get("transport"):  # has logged in before: pytapo also uses this text as a catch-all
                 s["blocked_until"] = now + AUTH_RETRY_BLOCK

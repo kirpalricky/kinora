@@ -558,7 +558,7 @@ function renderFilters(loading){
   if(!filtersVisible(keys.length)){ sel.clear(); box.innerHTML=''; filterSig=''; return; }   // zero or one type: no filter row
   const sig=keys.map(t=>t+':'+counts[t]).join(',');
   if(sig!==filterSig){ filterSig=sig;
-    box.innerHTML=keys.map(t=>`<button class="chip" type="button" data-t="${t}"><i class="dot" data-type="${t}"></i>${esc(T(+t).n)} <span>${counts[t]}</span></button>`).join('');
+    box.innerHTML=keys.map(t=>`<button class="chip" type="button" data-t="${esc(t)}"><i class="dot" data-type="${t}"></i>${esc(T(+t).n)} <span>${counts[t]}</span></button>`).join('');
     box.querySelectorAll('i[data-type]').forEach(i=>i.style.setProperty('background',T(+i.dataset.type).c)); }
   box.querySelectorAll('button[data-t]').forEach(b=>{ const on=sel.has(+b.dataset.t); b.classList.toggle('on',on); b.setAttribute('aria-pressed',String(on)); });
 }
@@ -651,8 +651,8 @@ function evRow(e){
   const it=TH.items.get(e.start), shown=it&&it.state==='show'&&it.url;
   const slot=hasThumbs()?thumbSlotClass(it?it.state:'idle'):'th-off';
   d.innerHTML=`<button class="evmain" type="button" tabindex="-1" aria-label="${esc(clockFull(e.start))}, ${esc(ty.n)}">
-      <span class="th ${slot}" data-ts="${e.start}">${shown?`<img class="th-img" alt="" src="${it.url}">`:''}<svg class="th-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3z"/></svg><b>${mmss(e.end-e.start)}</b></span>
-      <span class="evtxt"><span class="t">${clockFull(e.start)}</span><span class="k"><i class="dot" data-type="${e.type}"></i>${esc(ty.n)}</span></span></button>
+      <span class="th ${slot}" data-ts="${esc(e.start)}">${shown?`<img class="th-img" alt="" src="${it.url}">`:''}<svg class="th-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3z"/></svg><b>${mmss(e.end-e.start)}</b></span>
+      <span class="evtxt"><span class="t">${esc(clockFull(e.start))}</span><span class="k"><i class="dot" data-type="${esc(e.type)}"></i>${esc(ty.n)}</span></span></button>
     <button class="exbtn" type="button" tabindex="-1" aria-label="${esc(exportLabel(e.start))}" title="Export this event"><svg class="pb-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>`;
   d.querySelector('.dot').style.setProperty('background',ty.c);
   d.querySelector('.exbtn').onclick=ev=>{ ev.stopPropagation(); openExport(e.start-5,e.end+5); };

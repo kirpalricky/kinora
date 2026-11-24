@@ -124,7 +124,7 @@ def active(cid):
 def file_for(cid, sid, name):
     """Path of a served file or None. Marks the session as being watched."""
     p = _sessions.get(cid)
-    if not p or p.sid != sid or not SID_RE.match(sid) or not FILE_RE.match(name):
+    if not p or p.sid != sid or not SID_RE.match(sid) or not FILE_RE.fullmatch(name):
         return None
     p.last_get = time.time()
     m = re.match(r"seg_(\d{5})\.ts$", name)

@@ -87,7 +87,7 @@ class UdtStream(asyncio.DatagramProtocol):
         pass
 
     def datagram_received(self, data, addr):
-        if addr[0] != self.peer[0] or len(data) < 16:
+        if addr != tuple(self.peer)[:2] or len(data) < 16:
             return
         if self.loss_in and os.urandom(1)[0] / 255 < self.loss_in and data[0] & 0x80 == 0:
             return
