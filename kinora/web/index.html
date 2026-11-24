@@ -417,6 +417,12 @@ details[open]>summary>.su-chev{transform:rotate(90deg)}
 .su-row-cam{min-height:52px;padding-block:8px}
 .su-row:hover{background:var(--c-surface-2)}
 .su-row[aria-current="page"]{background:var(--c-accent-soft);color:var(--c-accent-text);font-weight:600;box-shadow:inset 3px 0 0 var(--c-accent)}
+.su-row-wrap{position:relative}
+.su-row-mv-pad{padding-right:84px}
+.su-row-mv{position:absolute;top:50%;right:8px;display:flex;gap:2px;transform:translateY(-50%)}
+.su-mv{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;border:0;border-radius:var(--r-sm);background:transparent;color:var(--c-accent-text);cursor:pointer}
+.su-mv:hover:not(:disabled){background:var(--c-surface)}
+.su-mv:disabled{color:var(--c-text-3);opacity:.45;cursor:default}
 .su-row-chev{margin-inline-start:auto;color:var(--c-text-2)}
 .su-row-main{display:flex;flex-direction:column;min-width:0;flex:1}
 .su-row-name{overflow-wrap:anywhere}
@@ -709,5 +715,5 @@ main{container-type:inline-size}
   <div class="row"><button id="expcancel">Close</button><button class="go" id="expgo">Export</button></div>
 </dialog>
 <script src="/static/hls.min.js"></script>
-<script src="/static/app.js?v=66"></script>
-<script src="/static/setup.js?v=10"></script></body></html>
+<script src="/static/app.js?v=67"></script>
+<script src="/static/setup.js?v=12"></script></body></html>

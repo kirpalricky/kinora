@@ -618,6 +618,26 @@ class Settings(SetupCase):
         self.assertNotIn("mac", body)
         self.assertNotIn("camera:", json.dumps(body))
 
+    async def test_order_is_saved_and_listed_by_the_state_and_the_camera_list(self):
+        ids = [(await self.add_cam(name=n, ip=f"10.0.0.{40 + i}"))["id"] for i, n in enumerate(("One", "Two", "Three"))]
+        new = [ids[2], ids[0], ids[1]]
+        body = await self.ok("PUT", "/api/cameras/order", {"order": new})
+        self.assertEqual(body["order"], new)
+        self.assertEqual([c["id"] for c in (await self.ok("GET", "/api/setup/state"))["cameras"]], new)
+        self.assertEqual([c["id"] for c in await self.ok("GET", "/api/cameras")], new)
+        self.assertEqual([c["id"] for c in json.loads((config.HOME / "cameras.json").read_text())["cameras"]], new)
+
+    async def test_order_must_name_every_camera_once(self):
+        ids = [(await self.add_cam(name=n, ip=f"10.0.0.{50 + i}"))["id"] for i, n in enumerate(("One", "Two"))]
+        for bad in ({"order": ids[:1]}, {"order": [ids[0], ids[0]]}, {"order": ids + ["nope"]}, {"order": "x"}, {"order": [1, 2]}, {}):
+            status, _ = await self.call("PUT", "/api/cameras/order", bad)
+            self.assertEqual(status, 400, bad)
+        status, _ = await self.call("PUT", "/api/cameras/order", {"order": ids, "x": 1})
+        self.assertEqual(status, 400)
+        status, _ = await self.call("PUT", "/api/cameras/order", {"order": ids}, origin=None)
+        self.assertEqual(status, 403)
+        self.assertEqual(list(config.CAMS), ids)
+
     async def test_remove_then_readd_keeps_device_id_and_budget(self):
         made = await self.add_cam(name="Kitchen", ip="10.0.0.34")
         cid = made["id"]

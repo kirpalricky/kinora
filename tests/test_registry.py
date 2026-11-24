@@ -230,6 +230,33 @@ class Add(Env):
         self.assertEqual(config.CAMS["kit"]["name"], "Kit")
 
 
+class Reorder(Env):
+    async def test_reorder_persists_and_keeps_the_same_dict(self):
+        for cid, ip in (("aa", IP1), ("bb", IP2), ("cc", "10.0.0.3")):
+            await cameras.add(make(cid, ip))
+        table = config.CAMS
+        await cameras.reorder(["cc", "aa", "bb"])
+        self.assertIs(config.CAMS, table)
+        self.assertEqual(list(config.CAMS), ["cc", "aa", "bb"])
+        self.assertEqual([c["id"] for c in self.disk()["cameras"]], ["cc", "aa", "bb"])
+        self.assertEqual([c["id"] for c in cameras.list()], ["cc", "aa", "bb"])
+
+    async def test_reorder_refuses_a_list_that_is_not_every_camera_once(self):
+        for cid, ip in (("aa", IP1), ("bb", IP2)):
+            await cameras.add(make(cid, ip))
+        for bad in (["aa"], ["aa", "aa"], ["aa", "bb", "cc"], ["aa", "xx"], "aabb", None):
+            with self.assertRaises(ValueError):
+                await cameras.reorder(bad)
+        self.assertEqual(list(config.CAMS), ["aa", "bb"])
+
+    async def test_same_order_writes_nothing(self):
+        await cameras.add(make("aa", IP1))
+        await cameras.add(make("bb", IP2))
+        before = (self.home / "cameras.json").stat().st_mtime_ns
+        await cameras.reorder(["aa", "bb"])
+        self.assertEqual((self.home / "cameras.json").stat().st_mtime_ns, before)
+
+
 class AtomicWrite(Env):
     async def test_write_keeps_a_backup_of_the_previous_version(self):
         await cameras.add(make("kit", IP1))

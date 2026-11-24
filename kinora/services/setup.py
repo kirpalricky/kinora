@@ -461,6 +461,16 @@ async def verify(request):
 
 
 # ---- camera settings ---------------------------------------------------------------------
+async def reorder_cameras(request):
+    """PUT /api/cameras/order {"order": [every camera id]}: the order the switcher and Settings list the cameras in."""
+    body = await _body(request, ("order",))
+    order = body.get("order")
+    if not isinstance(order, list) or not all(isinstance(i, str) for i in order):
+        raise BadInput("order must be a list of camera ids")
+    await _registry(cameras.reorder(order))
+    return web.json_response({"order": list(config.CAMS)})
+
+
 async def patch_camera(request):
     cam = _camera(request.match_info["cam_id"])
     body = await _body(request, PATCH_FIELDS)

@@ -678,6 +678,7 @@ def make_app(background=True):
         web.get("/api/setup/discover", discover_api.suggest),
         web.post("/api/setup/discover", discover_api.discover),
         web.post("/api/setup/verify", setup_api.verify),
+        web.put("/api/cameras/order", setup_api.reorder_cameras),
         web.patch("/api/cameras/{cam_id}", setup_api.patch_camera),
         web.post("/api/cameras/{cam_id}/credentials", setup_api.camera_credentials),
         web.delete("/api/cameras/{cam_id}", setup_api.delete_camera),

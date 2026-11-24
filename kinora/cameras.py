@@ -23,6 +23,7 @@ reused; a camera added at a tombstoned IP reuses that device_id, so its gate bud
 Writes: a temp file in the data directory, fsync, os.replace; the previous file is kept as cameras.json.bak.
 """
 import asyncio
+import builtins
 import contextlib
 import json
 import os
@@ -204,6 +205,21 @@ async def update_many(changes: dict):
             for cid in changes:
                 config.CAMS[cid] = new[cid]
                 config.CAM_BY_IP[new[cid]["ip"]] = new[cid]
+
+
+async def reorder(order):
+    """Put the cameras in this order (a list of every camera id, once each). The order is the one of cameras.json and
+    is what the switcher, Settings and /api/cameras show. Nothing else changes: no camera is quiesced and no login happens.
+    A list that does not name exactly the cameras present (one was added or removed meanwhile) is refused."""
+    async with _cfg_lock:
+        if (not isinstance(order, builtins.list) or len(set(order)) != len(order) or set(order) != set(config.CAMS)):
+            raise ValueError("the order must name every camera once")
+        final = [config.CAMS[cid] for cid in order]
+        if [c["id"] for c in final] == builtins.list(config.CAMS):
+            return
+        await asyncio.to_thread(_persist, final, config.TOMBSTONES)
+        config.CAMS.clear()   # the same dict object: importers of config.CAMS see the new order
+        config.CAMS.update({c["id"]: c for c in final})
 
 
 async def credentials_changed(cid):

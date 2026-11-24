@@ -6,7 +6,7 @@ const names = ['signInText', 'signInValue', 'cameraAccountGiven', 'loginLabel', 
   'validateName', 'validateEmail', 'validateSecret', 'validateAddForm', 'numberError', 'verifyHold', 'modelMismatch', 'seenModel',
   'modelPatchBody', 'modelFixBody', 'isAuthFailure', 'dialogCopy', 'friendlyVerifyReason', 'plainError', 'camState', 'liveRow',
   'pickSelection', 'verifyTitle', 'verifyLead', 'openReason', 'prereqRows', 'themeLabel', 'themeAria', 'themeIconName',
-  'addButtonLabel', 'accountPlan', 'validateAddRow', 'addBatchPlan', 'addBatchBody', 'runAddBatch'];
+  'addButtonLabel', 'accountPlan', 'validateAddRow', 'addBatchPlan', 'addBatchBody', 'runAddBatch', 'movedOrder'];
 const ctx = {}; vm.createContext(ctx);
 vm.runInContext(block + ';' + names.map(n => `this.${n}=${n};`).join(''), ctx);
 const F = ctx;
@@ -141,6 +141,8 @@ check('live view: the developer setting is named as such', F.liveRow({secret_sou
 const cA = {id: 'a', name: 'Baby', enabled: true, verified: true, status: 'ok'}, cB = {id: 'b', name: 'Kitchen', verified: false, status: 'not_verified'};
 const cC = {id: 'c', name: 'Living', enabled: true, verified: true, status: 'ok'};
 check('selection: the first camera that needs attention', F.pickSelection([cA, cB, cC]) === 'b');
+check('order: a camera moves one place up or down', JSON.stringify(F.movedOrder(['a', 'b', 'c'], 'b', -1)) === '["b","a","c"]' && JSON.stringify(F.movedOrder(['a', 'b', 'c'], 'b', 1)) === '["a","c","b"]');
+check('order: the ends and unknown ids stay as they are', JSON.stringify(F.movedOrder(['a', 'b'], 'a', -1)) === '["a","b"]' && JSON.stringify(F.movedOrder(['a', 'b'], 'b', 1)) === '["a","b"]' && JSON.stringify(F.movedOrder(['a', 'b'], 'x', 1)) === '["a","b"]');
 check('selection: all ready means the first camera, none means empty', F.pickSelection([cA, cC]) === 'a' && F.pickSelection([]) === '');
 
 // Verify page copy: title and lead, and the footer reason beside "Open timeline"

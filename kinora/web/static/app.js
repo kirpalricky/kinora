@@ -158,8 +158,7 @@ const dayLabel=()=>day.toLocaleDateString('en-CA');  // 2026-11-21
 
 async function init(){
   const cams=await (await fetch('/api/cameras')).json();
-  const ORDER=['c200','c201','c199'];   // Living Room, Kitchen, Baby Room
-  cams.sort((a,b)=>ORDER.indexOf(a.id)-ORDER.indexOf(b.id));
+  // /api/cameras lists the cameras in the order the owner chose (Settings, Order); that order is used as is.
   // Only a verified and enabled camera may be contacted (listing, live, clips). Others are shown disabled; with none,
   // the setup wizard (static/setup.js) owns the screen and this page does not start playback.
   const okCam=c=>!!(c.enabled&&c.verified);

@@ -241,6 +241,14 @@ function pickSelection(cams) {
   const need = cams.find(c => camState(c, null, false, false).dot !== 'ok');
   return (need || cams[0]).id;
 }
+// The camera ids with `id` moved one place up (dir -1) or down (+1); the same list when it is already at that end.
+function movedOrder(ids, id, dir) {
+  const i = ids.indexOf(id), j = i + dir;
+  if (i < 0 || j < 0 || j >= ids.length) return ids.slice();
+  const out = ids.slice();
+  out[i] = ids[j]; out[j] = ids[i];
+  return out;
+}
 // Verify page title: "Verify your cameras" first; the counts once cameras are ready; "No camera is ready yet" after a try.
 function verifyTitle(cams, anyTried) {
   const n = cams.filter(isPlayable).length;
@@ -297,6 +305,8 @@ const SU_ICONS = {
   chevron: [['path', {d: 'M9 6l6 6-6 6'}]],
   back: [['path', {d: 'M15 6l-6 6 6 6'}]],
   plus: [['path', {d: 'M12 5v14M5 12h14'}]],
+  up: [['path', {d: 'M6 14l6-6 6 6'}]],
+  down: [['path', {d: 'M6 10l6 6 6-6'}]],
   pencil: [['path', {d: 'M4 20h4L19 9l-4-4L4 16v4z'}]],
   mark: [['rect', {class: 'su-mk-b', x: 3, y: 3, width: 14, height: 14, rx: 4}], ['rect', {class: 'su-mk-f', x: 7, y: 7, width: 14, height: 14, rx: 4}]],
 };
@@ -926,7 +936,11 @@ function sideNav(cams) {
     narrow() ? icon('chevron', 'su-row-chev') : null);
   const camRows = cams.map(c => {
     const s = camState(c, SU.vs[c.id] || null, SU.busy === c.id, waitingNow(c));
-    return row(c.id, c.name, {cam: true, dot: s.dot, sub: s.nav});
+    const r = row(c.id, c.name, {cam: true, dot: s.dot, sub: s.nav});
+    // The selected camera carries its own Up and Down arrows (a sibling of the row button: buttons do not nest).
+    if (c.id !== SU.sel || cams.length < 2 || narrow()) return r;
+    r.classList.add('su-row-mv-pad');
+    return h('div', {class: 'su-row-wrap'}, r, h('div', {class: 'su-row-mv'}, moveButton(c, -1), moveButton(c, 1)));
   });
   const addRow = SU.sel === 'new' ? row('new', 'New camera', {cam: true, dot: 'mut'}) : row('new', 'Add camera', {cam: true, plus: true});
   // Group labels are divs named by aria-labelledby, so the pane's title is the first heading of the page.
@@ -968,6 +982,7 @@ function paneCamera(c) {
     section('Connection', connectionCard(c)),
     section('Live view', liveCard(c)),
     section('Playback', playbackCard(c)),
+    SU.state.cameras.length > 1 && narrow() ? section('Order', orderCard(c)) : null,   // on a wide screen the sidebar row has the arrows
     section('Remove', removeCard(c))];
 }
 function identity(c, st) {
@@ -1202,6 +1217,35 @@ async function saveFlag(c, key, val, savedKey, focus) {
   renderView(`[data-focus="${focus}"]`);
 }
 // Remove: a confirm dialog, then the camera goes (its saved passwords are deleted, the sign-in history is kept).
+// An icon button that moves camera c one place (dir -1 up, +1 down) in the order; disabled at the end of the list.
+function moveButton(c, dir) {
+  const ids = SU.state.cameras.map(x => x.id), j = ids.indexOf(c.id) + dir;
+  return h('button', {type: 'button', class: 'su-mv', 'data-focus': `move${dir}:${c.id}`, disabled: j < 0 || j >= ids.length,
+    'aria-label': `Move ${c.name} ${dir < 0 ? 'up' : 'down'}`, onclick: () => moveCam(c, dir)}, icon(dir < 0 ? 'up' : 'down'));
+}
+// Order: where the camera sits in the timeline's switcher and in this list. One step at a time, so a keyboard works.
+function orderCard(c) {
+  const ids = SU.state.cameras.map(x => x.id), i = ids.indexOf(c.id), key = 'order:' + c.id;
+  const mk = (dir, label, ico) => {
+    const b = btn(label, () => moveCam(c, dir), '', {'data-focus': `move${dir}:${c.id}`, disabled: i + dir < 0 || i + dir >= ids.length});
+    b.prepend(icon(ico));
+    return b;
+  };
+  return h('div', {class: 'su-card-s'},
+    h('div', {class: 'su-cred su-cred-solo'},
+      h('span', {class: 'su-cred-v'}, `Camera ${i + 1} of ${ids.length}`, savedTag(key)),
+      h('div', {class: 'su-cred-a'}, mk(-1, 'Move up', 'up'), mk(1, 'Move down', 'down'))),
+    errAt(key));
+}
+async function moveCam(c, dir) {
+  const ids = SU.state.cameras.map(x => x.id), order = movedOrder(ids, c.id, dir), key = 'order:' + c.id;
+  const r = await api('PUT', '/api/cameras/order', {order});
+  SU.errs = {};
+  if (r.ok) { SU.changed = true; SU.saved = key; } else SU.errs[key] = plainError(r.text);
+  await refresh();
+  // The pressed button may now be disabled (the camera reached an end): focus goes to the other one.
+  renderView(`[data-focus="move${dir}:${c.id}"]:not(:disabled),[data-focus="move${-dir}:${c.id}"]:not(:disabled),[data-focus="pane-title"]`);
+}
 function removeCard(c) {
   return h('div', {class: 'su-card-s su-danger'},
     h('div', {class: 'su-cred su-cred-solo'}, h('span', {class: 'su-cred-v', text: `Remove ${c.name} from this app`}),
