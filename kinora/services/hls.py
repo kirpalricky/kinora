@@ -5,7 +5,7 @@ from pathlib import Path
 import psutil
 from aiohttp import web
 
-FILE_RE = re.compile(r"^(index\.m3u8|seg_\d{5}\.ts)$")
+FILE_RE = re.compile(r"(index\.m3u8|seg_\d{5}\.ts)")   # used with fullmatch (a "$" would accept a trailing newline)
 
 
 def content_type(name: str) -> str:

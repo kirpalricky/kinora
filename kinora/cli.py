@@ -86,7 +86,7 @@ def start(args):
     from kinora import config, instance
     instance.startup()   # one server per machine, before kinora.server is imported
     from kinora import server
-    url = f"http://localhost:{config.PORT}"
+    url = f"http://127.0.0.1:{config.PORT}"
     on_started = None
     if should_open_browser(args.no_browser):
         def on_started():

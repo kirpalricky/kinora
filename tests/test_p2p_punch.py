@@ -26,6 +26,15 @@ class Punch(unittest.TestCase):
         self.assertEqual(sock.recvfrom.call_count, 2)
         sock.sendto.assert_any_call(answer, CAM)
 
+    def test_reply_from_another_host_is_ignored(self):
+        sock = mock.Mock()
+        answer = b"2" + SID.encode()[1:]
+        sock.recvfrom.side_effect = [(answer, ("192.0.2.99", 9999)), (answer, CAM)]
+        self.assertEqual(p2p.punch(sock, SID, CAM, timeout=5), CAM)
+        self.assertEqual(sock.recvfrom.call_count, 2)
+        for call in sock.sendto.call_args_list:
+            self.assertNotEqual(call.args[1][0], "192.0.2.99")
+
     def test_keeps_punching_until_the_deadline(self):
         sock = mock.Mock()
         sock.recvfrom.side_effect = ConnectionResetError(10054, "reset")

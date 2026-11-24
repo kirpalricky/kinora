@@ -28,10 +28,24 @@ async def listing_data(cam, date, kind, fetch, refresh=False):
     return data, "miss"
 
 
+def _int(v):
+    """v as an int, or None for anything else (bool, str, float, None): the page puts these in HTML and the cache."""
+    return v if isinstance(v, int) and not isinstance(v, bool) else None
+
+
+def _span(start, end):
+    s, e = _int(start), _int(end)
+    return (s, e) if s is not None and e is not None and 0 <= s <= e < 10**11 else None
+
+
 async def fetch_recordings(api, cam, date):
     raw = await api(cam, lambda t: t.getRecordings(date))
-    clips = [{"start": v["startTime"], "end": v["endTime"], "type": v.get("vedio_type")}
-             for day in raw for v in day.values()]
+    clips = []
+    for day in raw:
+        for v in day.values():
+            span = _span(v.get("startTime"), v.get("endTime"))
+            if span:   # malformed rows (a camera is not trusted to send numbers) are dropped
+                clips.append({"start": span[0], "end": span[1], "type": v.get("vedio_type")})
     return sorted(clips, key=lambda c: c["start"])
 
 
@@ -39,5 +53,9 @@ async def fetch_events(api, cam, date):
     d = datetime.datetime.strptime(date, "%Y%m%d")
     raw = await api(cam, lambda t: t.getEvents(int(d.timestamp()),
                                                int((d + datetime.timedelta(days=1)).timestamp())))
-    out = [{"start": e["start_time"], "end": e["end_time"], "type": e["alarm_type"]} for e in raw]
+    out = []
+    for e in raw:
+        span, kind = _span(e.get("start_time"), e.get("end_time")), _int(e.get("alarm_type"))
+        if span and kind is not None:
+            out.append({"start": span[0], "end": span[1], "type": kind})
     return sorted(out, key=lambda e: e["start"])

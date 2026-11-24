@@ -172,7 +172,7 @@ async def _start(live_root, cam, stream="stream1"):
 
 async def live_file(request, cam, live_root: Path):
     name = request.match_info["file"]
-    if not hls.FILE_RE.match(name):
+    if not hls.FILE_RE.fullmatch(name):
         raise web.HTTPNotFound()
     cid = cam["id"]
     _last[cid] = time.time()
