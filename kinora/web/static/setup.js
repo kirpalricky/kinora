@@ -466,7 +466,7 @@ function go(view) {
   SU.view = view;
   if (view !== 'add') SU.add = null;
   if (view !== 'settings') SU.newRow = null;
-  SU.edit = ''; SU.opener = ''; SU.errs = {}; SU.saved = '';
+  SU.edit = ''; SU.opener = ''; SU.errs = {}; SU.saved = ''; SU.devForm = {ip: '', name: ''};
   renderView(view === 'settings' ? `[data-focus="side:${SU.sel}"],[data-focus="pane-title"]` : 'h2');
 }
 // Progress: caption and four segments (wizard only).
@@ -547,6 +547,7 @@ function openSetup(view, sel) {
 function closeSetup() {
   if (SU.changed) { location.reload(); return; }   // the timeline reads cameras.json at start: reload to show the new list
   if (!SU.playable) return;
+  SU.devForm = {ip: '', name: ''};
   byId('setup').hidden = true;
   byId('app').hidden = false;
   const gear = byId('settingsbtn');
@@ -587,10 +588,16 @@ function sideKeys(e) {
   rows[(i + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length].focus();
 }
 // Theme: the same key and cycle as the app bar's Theme button (app.js applyTheme, nextTheme, THEMES, theme).
+// app.js owns the theme; if it stopped before defining it, these fall back to Auto so Settings still renders.
+function themeNow() { try { return theme; } catch (e) { return 'system'; } }
+function themeChoices() { try { return THEMES; } catch (e) { return ['system', 'light', 'dark']; } }
+function themeWord(t) {
+  try { return SU_THEME_NAME[t]; } catch (e) { return {system: 'Auto', light: 'Light', dark: 'Dark'}[t]; }
+}
 function setTheme(t) {
-  theme = t;
+  try { theme = t; } catch (e) {}
   try { localStorage.setItem('theme', t); } catch (e) {}
-  applyTheme(t);
+  if (typeof applyTheme === 'function') applyTheme(t);
   renderView(`[data-focus="theme:${t}"]`);
 }
 
@@ -971,7 +978,7 @@ function selectPane(sel) {
   const prior = SU.sel;
   if (sel === 'new') SU.prevSel = prior === 'new' ? SU.prevSel : prior;
   const wasList = SU.screen === 'list';
-  SU.sel = sel; SU.edit = ''; SU.opener = ''; SU.errs = {}; SU.saved = '';
+  SU.sel = sel; SU.edit = ''; SU.opener = ''; SU.errs = {}; SU.saved = ''; SU.devForm = {ip: '', name: ''};
   SU.newRow = null;
   if (narrow()) {
     SU.screen = 'detail';
@@ -1041,7 +1048,8 @@ async function saveName(c, input) {
   else renderView(`[data-focus="edit:name:${c.id}"]`);
 }
 function startEdit(key, opener) {
-  SU.edit = key; SU.opener = opener || ''; SU.errs = {}; SU.saved = '';
+  SU.edit = key; SU.opener = opener || ''; SU.saved = '';
+  if (key === 'device-add') delete SU.errs.add; else SU.errs = {};   // the add form clears only its own error
   renderView(`[data-focus="edit:${key}"]`);
 }
 function endEdit() {
@@ -1359,10 +1367,10 @@ function paneComputer() {
 // Auto / Light / Dark: a radio group (aria-checked on the chosen one, one tab stop, arrow keys apply).
 function themeGroup() {
   const group = h('div', {class: 'su-seg-group', role: 'radiogroup', 'aria-label': 'Colour theme', onkeydown: themeKeys});
-  for (const t of THEMES) {
-    const on = theme === t;
+  for (const t of themeChoices()) {
+    const on = themeNow() === t;
     group.append(h('button', {type: 'button', class: 'su-seg-btn', role: 'radio', 'aria-checked': on ? 'true' : 'false',
-      tabindex: on ? '0' : '-1', 'data-focus': 'theme:' + t, onclick: () => setTheme(t), text: SU_THEME_NAME[t]}));
+      tabindex: on ? '0' : '-1', 'data-focus': 'theme:' + t, onclick: () => setTheme(t), text: themeWord(t)}));
   }
   return group;
 }
@@ -1372,7 +1380,8 @@ function themeKeys(e) {
   const btns = [...e.currentTarget.querySelectorAll('[role="radio"]')], i = btns.indexOf(e.target);
   if (i < 0) return;
   e.preventDefault();
-  setTheme(THEMES[(i + (e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1) + btns.length) % btns.length]);
+  const choices = themeChoices();
+  setTheme(choices[(i + (e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1) + btns.length) % btns.length]);
 }
 function paneAbout() {
   const version = SU.state && SU.state.version;
@@ -1477,7 +1486,7 @@ function addressBox(d) {
   if (!d.address) SU.qr = false;   // the QR code is of the address the network socket listens on: no address, no code
   if (d.address) {
     const qrBtn = btn(SU.qr ? 'Hide QR code' : 'Show QR code', toggleQr, 'ghost sm',
-      {'data-focus': 'qr-toggle', 'aria-expanded': SU.qr ? 'true' : 'false'});
+      {'data-focus': 'qr-toggle', 'aria-expanded': SU.qr ? 'true' : 'false', 'aria-controls': SU.qr ? 'su-qr-panel' : undefined});
     kids.push(h('div', {class: 'su-card-s'}, cred('Open this on the other computer',
       h('span', {class: 'su-mono', text: d.address}), [btn('Copy', () => copyAddress(d.address), 'ghost sm', {'data-focus': 'copy-address'}), qrBtn], 'su-cred-addr')));
     if (SU.qr) kids.push(qrPanel(d.address));
@@ -1489,7 +1498,7 @@ function addressBox(d) {
 function toggleQr() { SU.qr = !SU.qr; renderView('[data-focus="qr-toggle"]'); }
 // The QR code of the address, from GET /api/setup/devices/qr (SVG). The query only gives each address its own image URL.
 function qrPanel(address) {
-  return h('div', {class: 'su-qr'},
+  return h('div', {class: 'su-qr', id: 'su-qr-panel'},
     h('div', {class: 'su-qr-tile'}, h('img', {class: 'su-qr-img', src: '/api/setup/devices/qr?a=' + encodeURIComponent(address),
       alt: 'QR code for ' + address, width: '200', height: '200'})),
     h('p', {class: 'su-foot-note', text: 'Scan with a phone camera on the same Wi-Fi. The phone then shows up under Waiting for approval.'}));
@@ -1652,7 +1661,7 @@ function tickCountdowns() {
   if (ended && SU.view !== 'add' && !typing) renderView();
 }
 
-// Called from the player's app bar and menu: Settings with the new-camera pane open.
+// Called from the player's app bar (Add camera): Settings with the new-camera pane open.
 function openSetupAdd() { SU.sel = 'new'; openSetup('settings', 'new'); }
 
 // ---------- boot ----------

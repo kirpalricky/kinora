@@ -52,7 +52,7 @@ video{width:100%;height:100%;display:block;background:#000;object-fit:contain}
 #msg.err{background:rgba(140,25,25,.78);font-weight:600}
 #freeze{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;display:none;pointer-events:none}
 
-/* app bar (56px): app mark, Playback, camera switcher, Add camera, overflow menu */
+/* app bar (56px): app mark, Playback, camera switcher, Add camera, Theme and Settings */
 .pb-bar{display:flex;align-items:center;gap:var(--s-3);height:56px;padding-inline:max(var(--gut),calc((100% - var(--max))/2 + var(--gut)));background:var(--c-surface);border-bottom:1px solid var(--c-line)}
 .pb-brand{display:flex;align-items:center;gap:var(--s-3);flex:none}
 .pb-mark{width:28px;height:28px;display:block;flex:none}
@@ -78,11 +78,7 @@ video{width:100%;height:100%;display:block;background:#000;object-fit:contain}
 .pb-btn.ghost{background:transparent;border-color:transparent;color:var(--c-accent-text)}
 .pb-btn.ghost:hover{background:var(--c-accent-soft)}
 .pb-btn .pb-ico{width:18px;height:18px}
-.pb-icon-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;flex:none;border:1px solid transparent;border-radius:var(--r-md);
-  background:transparent;color:var(--c-text-2);cursor:pointer}
-.pb-icon-btn:hover,.pb-icon-btn[aria-expanded="true"]{background:var(--c-surface-2);color:var(--c-text)}
 .pb-ico{width:20px;height:20px;display:block;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
-.pb-dots{stroke-width:3}
 .pb-bar-r{display:flex;align-items:center;gap:var(--s-2);margin-left:auto;flex:none}
 .pb-mi{display:flex;align-items:center;width:100%;min-height:40px;padding:0 12px;border:0;border-radius:var(--r-sm);background:transparent;
   color:var(--c-text);font:inherit;font-size:14px;line-height:20px;text-align:left;cursor:pointer}
@@ -506,8 +502,9 @@ main{container-type:inline-size}
 @container (max-width:839px){.tx-r{flex:1 0 100%;justify-content:space-between;margin-left:0}}
 /* Live/Recorded segmented control: selected segment is raised on the track */
 /* right group of the app bar: Theme (icon only) and Settings (gear, label at 960px and up); 36px ghost buttons, 44px below 600px */
-.pb-settings,.pb-theme{height:36px;padding:0 12px;gap:var(--s-2);background:transparent;border-color:transparent;color:var(--c-text-2)}
-.pb-theme{width:36px;padding:0}
+/* both are 36px icon buttons (one size rule); the Settings label takes over the width at 960px and up */
+.pb-settings,.pb-theme{width:36px;height:36px;padding:0;gap:var(--s-2);background:transparent;border-color:transparent;color:var(--c-text-2)}
+@media(min-width:960px){.pb-settings{width:auto;padding:0 12px}}
 .pb-settings:hover,.pb-theme:hover{background:var(--c-surface-2);color:var(--c-text);border-color:var(--c-line)}
 .pb-settings .pb-ico,.pb-theme .pb-ico{width:20px;height:20px}
 .pb-theme .pb-half{fill:currentColor}
@@ -568,7 +565,7 @@ main{container-type:inline-size}
   .pb-switch::before{left:0;background:linear-gradient(to right,var(--c-surface),transparent)}
   .pb-switch::after{right:0;background:linear-gradient(to left,var(--c-surface),transparent)}
 }
-/* below 600: 52px app bar, one camera button, bottom sheets for cameras, events and the menu; 44px targets, 16px inputs */
+/* below 600: 52px app bar, one camera button, bottom sheets for cameras and events; 44px targets, 16px inputs */
 @media(max-width:599px){
   .pb-bar{height:52px;gap:var(--s-2)}
   #vwrap{border-radius:var(--r-md)}
@@ -632,6 +629,7 @@ main{container-type:inline-size}
   <button class="pb-btn ghost" id="addcam" type="button" title="Add a camera">+ Add camera</button>
   <div class="pb-bar-r">
     <button class="pb-btn pb-theme" id="themebtn" type="button" aria-label="Theme" title="Theme"><svg class="pb-ico" data-i="half" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><path class="pb-half" d="M12 3.5a8.5 8.5 0 0 1 0 17z"/></svg><svg class="pb-ico" data-i="sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg><svg class="pb-ico" data-i="moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg></button>
+    <span class="pb-sr" id="themestatus" role="status"></span>
     <button class="pb-btn pb-settings" id="settingsbtn" type="button" aria-label="Settings" title="Settings"><svg class="pb-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="pb-settings-lbl">Settings</span></button>
   </div>
 </header>
@@ -706,5 +704,5 @@ main{container-type:inline-size}
   <div class="row"><button id="expcancel">Close</button><button class="go" id="expgo">Export</button></div>
 </dialog>
 <script src="/static/hls.min.js"></script>
-<script src="/static/app.js?v=68"></script>
-<script src="/static/setup.js?v=15"></script></body></html>
+<script src="/static/app.js?v=69"></script>
+<script src="/static/setup.js?v=16"></script></body></html>

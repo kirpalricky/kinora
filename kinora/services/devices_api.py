@@ -54,11 +54,14 @@ def view(app):
     address = address_error = None
     if sharing and listening:
         bound = state["lan_ip"]
-        now, _ = _network_now()
-        if now == bound:
-            address = f"http://{bound}:{config.PORT}"
-        else:
+        now, err = _network_now()
+        if bound and now == bound:   # a real bound address only: no address is never shown as "None"
+            host = f"[{bound}]" if ":" in bound else bound   # an IPv6 literal needs brackets in a URL
+            address = f"http://{host}:{config.PORT}"
+        elif bound:
             address_error = CHANGED_TEXT
+        else:
+            address_error = err or "Kinora is not listening on your network. Turn sharing off and on again."
     elif sharing:
         now, err = _network_now()
         address_error = err if now is None else "Kinora is not listening on your network. Turn sharing off and on again."
@@ -147,7 +150,9 @@ async def add_device(request):
 def qr_svg(address):
     """The address as an SVG QR code: error level M, a 4-module border, dark modules on white (it scans in dark mode too)."""
     buf = io.BytesIO()
-    segno.make(address, error="m").save(buf, kind="svg", scale=1, border=4, dark="#000", light="#fff", xmldecl=False, nl=False)
+    # omitsize: segno writes a viewBox (modules + 2 x border) and no fixed width or height, so the <img> sets the size
+    segno.make(address, error="m").save(buf, kind="svg", scale=1, border=4, dark="#000", light="#fff", xmldecl=False, nl=False,
+                                        omitsize=True)
     return buf.getvalue()
 
 
@@ -157,6 +162,9 @@ async def address_qr(request):
     if not address:
         return web.Response(status=404, text="Kinora is not listening on your network, so there is no address to show.",
                             content_type="text/plain")
+    asked = request.query.get("a")   # optional: the address the page drew the code for (a cache key); a stale one is refused
+    if asked is not None and asked != address:
+        return web.Response(status=409, text="The network address changed. Reload this page.", content_type="text/plain")
     return web.Response(body=qr_svg(address), content_type="image/svg+xml", headers={"Cache-Control": "no-store"})
 
 

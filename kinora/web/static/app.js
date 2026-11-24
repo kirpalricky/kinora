@@ -839,12 +839,16 @@ addEventListener('blur',ptzStop);
 /* ---------- theme: System (default) / Light / Dark ---------- */
 // Paints the app bar's Theme button (icon and words for the current choice) and the page colours. The Settings
 // Appearance group (setup.js) is redrawn by setTheme, which calls this too.
+// The button's three icons are SVGs (no `hidden` property): the attribute is set and removed on each one.
+let themePainted=false;   // the first call (page load) does not announce the choice
 function applyTheme(t){
   const root=document.documentElement;
   if(t==='light'||t==='dark') root.setAttribute('data-theme',t); else root.removeAttribute('data-theme');
-  const tb=$('themebtn'), words=themeAria(t);
+  const tb=$('themebtn'), words=themeAria(t), now=themeIconName(t);
   tb.title=words; tb.setAttribute('aria-label',words);
-  tb.querySelectorAll('[data-i]').forEach(s=>{ s.hidden=s.dataset.i!==themeIconName(t); });
+  tb.querySelectorAll('[data-i]').forEach(s=>s.toggleAttribute('hidden', s.dataset.i!==now));
+  if(themePainted){ const st=$('themestatus'); if(st) st.textContent=themeLabel(t); }   // polite announcement
+  themePainted=true;
   draw();                                   // the timeline canvas reads the colours when it draws
 }
 let theme='system'; try{ theme=localStorage.getItem('theme')||'system'; }catch(e){}

@@ -64,7 +64,7 @@ Dependencies go inward: `kinora/server.py` -> `kinora/services/*` -> `kinora/cam
 | POST `/api/ptz` | `ptz` | pan/tilt step |
 | GET `/api/setup/devices` | `devices_api.get_devices` | Other devices: `{sharing, listening, address, address_error, from_command_line, devices, pending, command_line}` (every device route answers this body) |
 | POST `/api/setup/devices` | `add_device` | `{ip, name?}`: allow a device (drops it from pending). 400 plain text on bad input |
-| GET `/api/setup/devices/qr` | `devices_api.address_qr` | no input: SVG (`image/svg+xml`, `no-store`) QR code of the address the network socket listens on (segno, error M, border 4); 404 plain text when not listening. Local only |
+| GET `/api/setup/devices/qr` | `devices_api.address_qr` | optional `a` query (the address the page drew for; a different one answers 409 plain text): SVG (`image/svg+xml`, `no-store`, viewBox, no fixed size) QR code of the address the network socket listens on (segno, error M, border 4); 404 plain text when not listening. Local only |
 | DELETE `/api/setup/devices/{ip}` | `remove_device` | remove a device; 404 when it is not listed |
 | POST `/api/setup/devices/dismiss` | `dismiss_device` | `{ip}`: forget a waiting device |
 | PUT `/api/setup/sharing` | `set_sharing` | `{enabled}`: starts or stops the network socket; 409 plain text when it cannot listen, or when the switch is set by the command line |

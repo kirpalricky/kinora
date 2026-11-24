@@ -386,6 +386,47 @@ class Api(unittest.IsolatedAsyncioTestCase):
         self.assertIn(b'stroke="#000"', svg)
         self.assertGreater(len(svg), 500)
 
+    def test_qr_svg_has_a_viewbox_of_modules_plus_the_border_and_no_fixed_size(self):
+        import segno
+        addr = "http://192.168.1.20:80"
+        modules = segno.make(addr, error="m").symbol_size(scale=1, border=0)[0]
+        svg = devices_api.qr_svg(addr).decode()
+        self.assertIn(f'viewBox="0 0 {modules + 8} {modules + 8}"', svg)   # the border is 4 modules on each side
+        self.assertNotIn(' width="', svg)
+        self.assertNotIn(' height="', svg)
+
+    async def test_qr_refuses_a_stale_address_and_accepts_the_current_or_none(self):
+        devices.set_sharing(True)
+        self.app[devices_api.LISTEN]["runner"] = web.AppRunner(self.app)
+        await devices_api.listen(self.app)
+        stale = await self.http.request("GET", "/api/setup/devices/qr?a=http%3A%2F%2F192.168.1.99%3A80", headers={"Host": HOST})
+        self.assertEqual(stale.status, 409)
+        self.assertEqual(stale.headers["Content-Type"], "text/plain; charset=utf-8")
+        current = await self.http.request("GET", f"/api/setup/devices/qr?a=http%3A%2F%2F{LAN}%3A{config.PORT}", headers={"Host": HOST})
+        self.assertEqual(current.status, 200)
+        absent = await self.http.request("GET", "/api/setup/devices/qr", headers={"Host": HOST})
+        self.assertEqual(absent.status, 200)
+
+    async def test_no_bound_address_is_never_shown_as_none(self):
+        devices.set_sharing(True)
+        self.app[devices_api.LISTEN]["lan_site"] = object()   # listening (a --host 0.0.0.0 start with no network)
+        self.app[devices_api.LISTEN]["lan_ip"] = None
+        with mock.patch.object(devices_api, "_network_now", return_value=(None, "No network connection found")):
+            v = devices_api.view(self.app)
+        self.assertIsNone(v["address"])
+        self.assertEqual(v["address_error"], "No network connection found")
+        status, _ = await self.call("GET", "/api/setup/devices/qr")
+        self.assertEqual(status, 404)
+
+    async def test_ipv6_address_is_bracketed_in_the_url(self):
+        devices.set_sharing(True)
+        self.app[devices_api.LISTEN]["lan_site"] = object()
+        self.app[devices_api.LISTEN]["lan_ip"] = "fd00::5"
+        with mock.patch.object(devices_api, "_network_now", return_value=("fd00::5", None)):
+            v = devices_api.view(self.app)
+        self.assertEqual(v["address"], f"http://[fd00::5]:{config.PORT}")
+        self.assertIsNone(v["address_error"])
+
     async def test_bound_address_is_shown_and_a_changed_one_is_reported(self):
         devices.set_sharing(True)
         runner = web.AppRunner(self.app)

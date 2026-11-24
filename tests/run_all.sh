@@ -28,4 +28,5 @@ $PY tests/test_p2p_setup.py
 command -v ffmpeg >/dev/null && $PY tests/test_play.py   # builds a synthetic clip with real ffmpeg
 command -v node >/dev/null && node tests/test_prefetch.js
 command -v node >/dev/null && node tests/test_setup_logic.js
+command -v node >/dev/null && node tests/test_setup_dom.js
 command -v node >/dev/null && node tests/test_player_logic.js
