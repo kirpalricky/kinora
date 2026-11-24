@@ -1479,7 +1479,7 @@ function addressBox(d) {
     const qrBtn = btn(SU.qr ? 'Hide QR code' : 'Show QR code', toggleQr, 'ghost sm',
       {'data-focus': 'qr-toggle', 'aria-expanded': SU.qr ? 'true' : 'false'});
     kids.push(h('div', {class: 'su-card-s'}, cred('Open this on the other computer',
-      h('span', {class: 'su-mono', text: d.address}), [btn('Copy', () => copyAddress(d.address), 'ghost sm', {'data-focus': 'copy-address'}), qrBtn])));
+      h('span', {class: 'su-mono', text: d.address}), [btn('Copy', () => copyAddress(d.address), 'ghost sm', {'data-focus': 'copy-address'}), qrBtn], 'su-cred-addr')));
     if (SU.qr) kids.push(qrPanel(d.address));
   }
   if (d.address_error) kids.push(h('p', {class: 'su-foot-note', text: d.address_error}));
@@ -1565,7 +1565,8 @@ async function restoreDevice(d) {
 }
 // Add a device: a ghost button under the list. Pressing it opens the form in place (SU.edit 'device-add', collapsed by default).
 function addDeviceArea() {
-  if (SU.edit !== 'device-add') return h('div', {class: 'su-bar'}, btn('Add a device', openDeviceForm, 'ghost', {'data-focus': 'dev-open'}));
+  if (SU.edit !== 'device-add') return h('div', {class: 'su-bar'},
+    h('button', {type: 'button', class: 'su-btn ghost', 'data-focus': 'dev-open', onclick: openDeviceForm}, icon('plus', 'su-btn-ico'), 'Add a device'));
   return addDeviceForm();
 }
 function openDeviceForm() {

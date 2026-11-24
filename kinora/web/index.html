@@ -384,6 +384,15 @@ details[open]>summary>.su-chev{transform:rotate(90deg)}
 .su-cred-l{font-size:14px;line-height:20px;color:var(--c-text-2)}
 .su-cred-v{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);min-width:0;font-size:15px;line-height:22px;color:var(--c-text);overflow-wrap:anywhere}
 .su-cred-a{display:flex;align-items:center;justify-content:flex-end;gap:var(--s-2)}
+/* an address or an IP is one token: it never breaks inside itself (a long value scrolls in its own box) */
+.su-cred-v .su-mono{white-space:nowrap}
+/* the address row: the address on its own line; the buttons sit beside it when they fit and wrap under it when they do not (right-aligned) */
+.su-cred.su-cred-addr{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2) var(--s-4)}
+.su-cred-addr>.su-cred-l{flex:0 0 100%}
+.su-cred-addr>.su-cred-v{flex:1 1 auto;min-width:0;max-width:100%;overflow-x:auto;overflow-wrap:normal;white-space:nowrap}
+.su-cred-addr>.su-cred-a{flex:none;margin-left:auto}
+/* icon inside a setup button (the plus of Add a device) */
+.su-btn-ico{width:18px;height:18px;flex:none}
 .su-cred-chip{display:inline-flex;flex-wrap:wrap;align-items:center;gap:var(--s-2)}
 .su-cred-note{padding:0 var(--s-5) 14px;font-size:14px;line-height:20px}
 .su-cred-note.su-bad{color:var(--c-bad)}
@@ -698,4 +707,4 @@ main{container-type:inline-size}
 </dialog>
 <script src="/static/hls.min.js"></script>
 <script src="/static/app.js?v=68"></script>
-<script src="/static/setup.js?v=14"></script></body></html>
+<script src="/static/setup.js?v=15"></script></body></html>
