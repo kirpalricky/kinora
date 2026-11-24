@@ -85,10 +85,6 @@ function seenModel(seen) {
 function modelPatchBody(model, apply) { return {model, apply_preset: !!apply}; }
 // Body for applying the model the device reports (silently, after a Verify that found another model). null if none.
 function modelFixBody(seen) { const code = seenModel(seen); return code ? modelPatchBody(code, true) : null; }
-const SU_THEME_NAME = {system: 'Auto', light: 'Light', dark: 'Dark'};
-function themeLabel(t) { return 'Theme: ' + (SU_THEME_NAME[t] || 'Auto'); }
-function themeAria(t) { return 'Colour theme: ' + (SU_THEME_NAME[t] || 'Auto') + ', switch'; }
-function themeIconName(t) { return {system: 'half', light: 'sun', dark: 'moon'}[t] || 'half'; }
 function addButtonLabel(n) { return n === 1 ? 'Add camera' : `Add ${n} cameras`; }
 // TP-Link account (one account for every camera): email and password, both required. Returns {body, errors};
 // body is null while any error is set.
@@ -286,10 +282,6 @@ function prereqRows(p) {
 }
 // Other devices (Settings > Other devices). state: the body of GET /api/setup/devices.
 const DEV_IP_MSG = "Enter the device's IP address, like 192.168.1.20";
-function devicesSubtitle(state) {
-  if (!state) return '';
-  return state.sharing ? 'On, ' + (state.devices || []).length + ' allowed' : 'Off';
-}
 function validateDeviceIp(s) { return validateIp(s) ? DEV_IP_MSG : ''; }
 function validateDeviceName(s) { return String(s || '').trim().length > 60 ? 'The name can be at most 60 characters.' : ''; }
 // "3 min ago" for a time in seconds before now.
@@ -317,7 +309,7 @@ function deviceLabel(d) { return d.name || d.ip; }
 // that shows "Saved" once. SU.vs: this page's last Verify result per camera. SU.deadline and SU.span: sign-in waits.
 const SU = {state: null, playable: false, view: 'prepare', changed: false, busy: '', vs: {}, deadline: {}, span: {},
   authStop: '', add: null, uid: 0, sel: '', prevSel: '', newRow: null, edit: '', opener: '', errs: {}, saved: '',
-  screen: 'list', loadErr: '', dev: null, devForm: {ip: '', name: ''}, devDirty: false, devErr: ''};
+  screen: 'list', loadErr: '', dev: null, devForm: {ip: '', name: ''}, devDirty: false, devErr: '', qr: false};
 const byId = id => document.getElementById(id);
 const SVG_NS = 'http://www.w3.org/2000/svg';
 // Icons: 20px on a 24 grid, stroke currentColor, no fill. Built with createElementNS (h() cannot make SVG).
@@ -557,7 +549,7 @@ function closeSetup() {
   if (!SU.playable) return;
   byId('setup').hidden = true;
   byId('app').hidden = false;
-  const gear = byId('menubtn');
+  const gear = byId('settingsbtn');
   if (gear) gear.focus();
 }
 // Header back button: the phone's detail screen goes back to the list; else the timeline (playable) or the setup.
@@ -594,7 +586,7 @@ function sideKeys(e) {
   e.preventDefault();
   rows[(i + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length].focus();
 }
-// Theme: the same key and cycle as the timeline's theme menu (app.js applyTheme, THEMES, theme).
+// Theme: the same key and cycle as the app bar's Theme button (app.js applyTheme, nextTheme, THEMES, theme).
 function setTheme(t) {
   theme = t;
   try { localStorage.setItem('theme', t); } catch (e) {}
@@ -973,7 +965,7 @@ function sideNav(cams) {
   return h('nav', {class: 'su-side', 'aria-label': 'Settings', onkeydown: sideKeys},
     group('su-g-cam', 'Cameras', [camRows, addRow]),
     group('su-g-gen', 'General', [row('account', 'TP-Link account', {}), row('computer', 'This computer', {}),
-      row('devices', 'Other devices', {sub: devicesSubtitle(SU.dev)}), row('about', 'About', {})]));
+      row('devices', 'Other devices', {}), row('about', 'About', {})]));
 }
 function selectPane(sel) {
   const prior = SU.sel;
@@ -1053,8 +1045,9 @@ function startEdit(key, opener) {
   renderView(`[data-focus="edit:${key}"]`);
 }
 function endEdit() {
-  const o = SU.opener;
+  const o = SU.opener, was = SU.edit;
   SU.edit = ''; SU.opener = ''; SU.errs = {};
+  if (was === 'device-add') SU.devForm = {ip: '', name: ''};   // Cancel or Escape drops the draft
   renderView(o ? `[data-focus="${o}"],[data-focus="pane-title"]` : '[data-focus="pane-title"],h2');
 }
 // PATCH one camera. Success: the camera's old Verify result is stale. Error: under the key.
@@ -1443,8 +1436,7 @@ function paneDevices() {
   const parts = [...head, section('Sharing', sharingBox(d))];
   if (d.sharing && (d.address || d.address_error)) parts.push(section('Address', addressBox(d)));
   if (d.pending.length) parts.push(section('Waiting for approval', pendingBox(d)));
-  parts.push(section('Allowed devices', allowedBox(d)));
-  parts.push(section('Add a device', addDeviceForm()));
+  parts.push(section('Allowed devices', h('div', {class: 'su-stack'}, allowedBox(d), addDeviceArea())));
   parts.push(h('p', {class: 'su-foot-note', text: 'There is no password on this connection: only turn it on for a network you trust.'}));
   return parts;
 }
@@ -1482,11 +1474,25 @@ async function setSharing(on) {
 }
 function addressBox(d) {
   const kids = [];
-  if (d.address) kids.push(h('div', {class: 'su-card-s'}, cred('Open this on the other computer',
-    h('span', {class: 'su-mono', text: d.address}), btn('Copy', () => copyAddress(d.address), 'ghost sm', {'data-focus': 'copy-address'}))));
+  if (!d.address) SU.qr = false;   // the QR code is of the address the network socket listens on: no address, no code
+  if (d.address) {
+    const qrBtn = btn(SU.qr ? 'Hide QR code' : 'Show QR code', toggleQr, 'ghost sm',
+      {'data-focus': 'qr-toggle', 'aria-expanded': SU.qr ? 'true' : 'false'});
+    kids.push(h('div', {class: 'su-card-s'}, cred('Open this on the other computer',
+      h('span', {class: 'su-mono', text: d.address}), [btn('Copy', () => copyAddress(d.address), 'ghost sm', {'data-focus': 'copy-address'}), qrBtn])));
+    if (SU.qr) kids.push(qrPanel(d.address));
+  }
   if (d.address_error) kids.push(h('p', {class: 'su-foot-note', text: d.address_error}));
   kids.push(errAt('address'));
   return h('div', {class: 'su-stack'}, kids);
+}
+function toggleQr() { SU.qr = !SU.qr; renderView('[data-focus="qr-toggle"]'); }
+// The QR code of the address, from GET /api/setup/devices/qr (SVG). The query only gives each address its own image URL.
+function qrPanel(address) {
+  return h('div', {class: 'su-qr'},
+    h('div', {class: 'su-qr-tile'}, h('img', {class: 'su-qr-img', src: '/api/setup/devices/qr?a=' + encodeURIComponent(address),
+      alt: 'QR code for ' + address, width: '200', height: '200'})),
+    h('p', {class: 'su-foot-note', text: 'Scan with a phone camera on the same Wi-Fi. The phone then shows up under Waiting for approval.'}));
 }
 async function copyAddress(addr) {
   delete SU.errs.address;
@@ -1557,6 +1563,16 @@ async function restoreDevice(d) {
   toast(`${deviceLabel(d)} can connect again.`);
   renderView('[data-focus="pane-title"]');
 }
+// Add a device: a ghost button under the list. Pressing it opens the form in place (SU.edit 'device-add', collapsed by default).
+function addDeviceArea() {
+  if (SU.edit !== 'device-add') return h('div', {class: 'su-bar'}, btn('Add a device', openDeviceForm, 'ghost', {'data-focus': 'dev-open'}));
+  return addDeviceForm();
+}
+function openDeviceForm() {
+  startEdit('device-add', 'dev-open');
+  const ip = document.querySelector('#setup [data-focus="dev-ip"]');
+  if (ip) ip.focus();
+}
 // Add a device: IP (required) and Name (optional). The draft lives in SU.devForm, so a redraw keeps what was typed.
 function addDeviceForm() {
   const f = SU.devForm;
@@ -1569,7 +1585,7 @@ function addDeviceForm() {
     labelled('IP address', ip, 'The address the other computer has on your network, such as 192.168.1.20.'),
     labelled('Name (optional)', name, 'For example Anna\'s laptop.'),
     errAt('add'),
-    h('div', {class: 'su-bar'}, submit));
+    h('div', {class: 'su-bar'}, btn('Cancel', endEdit, 'ghost', {'data-focus': 'dev-cancel'}), submit));
 }
 async function addDevice() {
   const f = SU.devForm, ipEl = document.querySelector('#setup [data-focus="dev-ip"]'), nameEl = document.querySelector('#setup [data-focus="dev-name"]');
@@ -1582,9 +1598,9 @@ async function addDevice() {
   const r = await api('POST', '/api/setup/devices', {ip, name});
   if (!r.ok) { SU.errs.add = r.text; renderView('[data-focus="dev-ip"]'); return; }
   applyDevices(r.data);
-  SU.devForm = {ip: '', name: ''};
+  SU.devForm = {ip: '', name: ''}; SU.edit = ''; SU.opener = '';
   toast(`${name || ip} can now connect.`);
-  renderView('[data-focus="dev-ip"]');
+  renderView('[data-focus="dev-open"],[data-focus="pane-title"]');
 }
 
 // Verify (state table): the Verify button of one camera. One camera at a time; a refused login stops the run.

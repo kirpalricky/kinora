@@ -3,7 +3,7 @@
 const fs = require('fs'), vm = require('vm');
 const src = fs.readFileSync(__dirname + '/../kinora/web/static/app.js', 'utf8');
 const block = src.split('/* player-logic:begin */')[1].split('/* player-logic:end */')[0];
-const names = ['gapsOf', 'mergeEvents', 'clockShort', 'clockFull', 'statusLine', 'modeAction', 'modeCaption', 'tabTarget', 'rovingTabIndex', 'countText', 'countChip', 'exportLabel', 'eventsPanelState', 'filtersVisible', 'newestFirst', 'rovingEventIndex', 'timelineKeyStep', 'thumbOutcome', 'thumbPick', 'thumbWakeMs', 'thumbMayRun', 'thumbSlotClass', 'THUMB_BACKOFF_MS', 'THUMB_MAX_TRIES'];
+const names = ['gapsOf', 'mergeEvents', 'clockShort', 'clockFull', 'statusLine', 'modeAction', 'modeCaption', 'tabTarget', 'rovingTabIndex', 'countText', 'countChip', 'exportLabel', 'eventsPanelState', 'filtersVisible', 'newestFirst', 'rovingEventIndex', 'timelineKeyStep', 'thumbOutcome', 'thumbPick', 'thumbWakeMs', 'thumbMayRun', 'thumbSlotClass', 'THUMB_BACKOFF_MS', 'THUMB_MAX_TRIES', 'THEMES', 'SU_THEME_NAME', 'nextTheme', 'themeLabel', 'themeAria', 'themeIconName'];
 const ctx = {}; vm.createContext(ctx);
 vm.runInContext(block + ';' + names.map(n => `this.${n}=${n};`).join(''), ctx);
 const F = ctx;
@@ -145,6 +145,26 @@ check('root spacing variables: 600px, 960px and 960-1279px overrides', /@media\(
 const ptzRule = (html.match(/#vwrap #ptz\{[^}]*\}/) || [''])[0];
 check('#vwrap #ptz sits in the top-right corner of the video (top and right = --s-4)', /top:var\(--s-4\)/.test(ptzRule) && /right:var\(--s-4\)/.test(ptzRule) && !/translateY/.test(ptzRule));
 check('no style= attribute in the new layout markup', !/\sstyle\s*=/.test(html.replace(/<style>[\s\S]*?<\/style>/g, '')));
+
+// Theme button: one click cycles Auto -> Light -> Dark -> Auto; label, aria and icon name the current choice
+check('theme cycle: next choice from each value wraps Auto -> Light -> Dark -> Auto', F.nextTheme('system') === 'light' && F.nextTheme('light') === 'dark' && F.nextTheme('dark') === 'system');
+check('theme cycle: THEMES order is the same as the cycle', sh(F.THEMES) === sh(['system', 'light', 'dark']));
+check('theme label per choice', F.themeLabel('system') === 'Theme: Auto' && F.themeLabel('light') === 'Theme: Light' && F.themeLabel('dark') === 'Theme: Dark');
+check('theme aria names the current choice and the next one', F.themeAria('system') === 'Theme: Auto. Switch to Light' && F.themeAria('light') === 'Theme: Light. Switch to Dark' && F.themeAria('dark') === 'Theme: Dark. Switch to Auto');
+check('theme icon per choice: half-circle, sun, moon', F.themeIconName('system') === 'half' && F.themeIconName('light') === 'sun' && F.themeIconName('dark') === 'moon' && F.themeIconName('zzz') === 'half');
+check('theme: the app bar Theme button is icon only (no visible words in the markup)', /id="themebtn"[^>]*aria-label="Theme"/.test(html) && !/themebtn[^<]*<\/button>/.test(html));
+
+// App bar: one Settings button (plain button, no menu), no overflow menu, no About dialog, no duplicate ids
+const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(m => m[1]);
+check('app bar: no duplicate element ids on the page', new Set(ids).size === ids.length);
+check('app bar: the Settings button is #settingsbtn, a plain button with aria-label Settings', /<button class="pb-btn pb-settings" id="settingsbtn" type="button" aria-label="Settings"/.test(html));
+check('app bar: the Settings button has no menu attributes', !/id="settingsbtn"[^>]*(aria-haspopup|aria-expanded|aria-controls)/.test(html));
+check('app bar: the overflow menu, its ids and the About dialog are gone', !/pbmenu|pb-menu|menubtn|aboutbtn|aboutclose|id="about"|id="theme"|pb-menuwrap/.test(html) && !/pbmenu|menubtn|aboutbtn|aboutclose|\$\('about'\)|openMenu|closeMenu|menuItems/.test(src));
+check('app bar: the right group holds Theme then Settings', html.indexOf('id="themebtn"') > 0 && html.indexOf('id="themebtn"') < html.indexOf('id="settingsbtn"') && html.indexOf('id="themebtn"') > html.indexOf('id="addcam"'));
+check('app bar: setup.js binds the Settings button to openSetup and nothing else in app.js binds it', /byId\('settingsbtn'\)\.addEventListener\('click', \(\) => openSetup\('settings'\)\)/.test(fs.readFileSync(__dirname + '/../kinora/web/static/setup.js', 'utf8')) && !/settingsbtn/.test(src));
+check('theme: applyTheme paints the Theme button and reads the shared helpers; no #theme radio group left in the menu', /function applyTheme[\s\S]*themebtn[\s\S]*themeIconName/.test(src) && !/\$\('theme'\)/.test(src));
+check('theme: setup.js does not define the theme helpers again (app.js loads first and owns them)', !/function (themeLabel|themeAria|themeIconName|nextTheme)|const (SU_THEME_NAME|THEMES) /.test(fs.readFileSync(__dirname + '/../kinora/web/static/setup.js', 'utf8')));
+check('versions: index.html loads app.js and setup.js with bumped query strings', /app\.js\?v=68"/.test(html) && /setup\.js\?v=14"/.test(html));
 
 console.log(ok ? 'ALL PASS' : 'SOME FAILED');
 process.exit(ok ? 0 : 1);

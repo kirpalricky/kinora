@@ -5,9 +5,9 @@ const block = src.split('/* setup-logic:begin */')[1].split('/* setup-logic:end 
 const names = ['signInText', 'signInValue', 'cameraAccountGiven', 'loginLabel', 'isPlayable', 'formatCountdown', 'validateIp', 'isPrivateIp', 'validateAddress',
   'validateName', 'validateEmail', 'validateSecret', 'validateAddForm', 'numberError', 'verifyHold', 'modelMismatch', 'seenModel',
   'modelPatchBody', 'modelFixBody', 'isAuthFailure', 'dialogCopy', 'friendlyVerifyReason', 'plainError', 'camState', 'liveRow',
-  'pickSelection', 'verifyTitle', 'verifyLead', 'openReason', 'prereqRows', 'themeLabel', 'themeAria', 'themeIconName',
+  'pickSelection', 'verifyTitle', 'verifyLead', 'openReason', 'prereqRows',
   'addButtonLabel', 'accountPlan', 'validateAddRow', 'addBatchPlan', 'addBatchBody', 'runAddBatch', 'movedOrder',
-  'devicesSubtitle', 'validateDeviceIp', 'validateDeviceName', 'agoText', 'devicesKey', 'deviceLabel'];
+  'validateDeviceIp', 'validateDeviceName', 'agoText', 'devicesKey', 'deviceLabel'];
 const ctx = {}; vm.createContext(ctx);
 vm.runInContext(block + ';' + names.map(n => `this.${n}=${n};`).join(''), ctx);
 const F = ctx;
@@ -176,10 +176,6 @@ check('prerequisites: no fix text names a file, a setting, an environment variab
 // Playable rule (the timeline lists only verified and enabled cameras)
 check('playable: verified and enabled only', F.isPlayable({enabled: true, verified: true}) && !F.isPlayable({enabled: false, verified: true}) && !F.isPlayable({enabled: true, verified: false}) && !F.isPlayable(undefined));
 
-// Theme label text in the Settings pane and the player header
-check('theme: label, aria text and icon per choice', F.themeLabel('system') === 'Theme: Auto' && F.themeLabel('light') === 'Theme: Light' && F.themeLabel('dark') === 'Theme: Dark'
-  && F.themeAria('system') === 'Colour theme: Auto, switch' && F.themeIconName('light') === 'sun' && F.themeIconName('dark') === 'moon' && F.themeIconName('system') === 'half');
-
 // Add button label
 check('add button: singular and plural', F.addButtonLabel(1) === 'Add camera' && F.addButtonLabel(3) === 'Add 3 cameras');
 
@@ -257,12 +253,21 @@ check('phone header: the detail screen names the item, not Settings', setupjs.in
 check('no inline style attribute or inline handler is added to the page', !/\sstyle=|\son(click|change|input|keydown)=/.test(html + setupjs));
 
 // Other devices: the sidebar line, the address and name checks, the waiting-time text, the redraw key
-check('devices: sidebar line is Off, or On with the number allowed', F.devicesSubtitle(null) === '' && F.devicesSubtitle({sharing: false, devices: [{ip: '192.168.1.2'}]}) === 'Off' && F.devicesSubtitle({sharing: true, devices: []}) === 'On, 0 allowed' && F.devicesSubtitle({sharing: true, devices: [{ip: '192.168.1.2'}, {ip: '192.168.1.3'}]}) === 'On, 2 allowed');
 check('devices: IP error text is the agreed sentence, and valid addresses pass', F.validateDeviceIp('192.168.1.20') === '' && F.validateDeviceIp(' 10.0.0.9 ') === '' && F.validateDeviceIp('192.168.1') === "Enter the device's IP address, like 192.168.1.20" && F.validateDeviceIp('') !== '');
 check('devices: name is optional and at most 60 characters', F.validateDeviceName('') === '' && F.validateDeviceName("Anna's laptop") === '' && F.validateDeviceName('a'.repeat(60)) === '' && F.validateDeviceName('a'.repeat(61)) !== '');
 check('devices: time ago in words', F.agoText(5) === 'a moment ago' && F.agoText(59) === 'a moment ago' && F.agoText(60) === '1 min ago' && F.agoText(3599) === '59 min ago' && F.agoText(3600) === '1 hour ago' && F.agoText(7200) === '2 hours ago' && F.agoText(86400) === '1 day ago' && F.agoText(-4) === 'a moment ago' && F.agoText(3 * 86400) === '3 days ago');
 check('devices: the redraw key ignores the last-seen times and changes with the list', F.devicesKey(null) === '' && F.devicesKey({sharing: true, devices: [], pending: [{ip: '192.168.1.9', last_seen: 1}]}) === F.devicesKey({sharing: true, devices: [], pending: [{ip: '192.168.1.9', last_seen: 99}]}) && F.devicesKey({sharing: true, devices: [], pending: []}) !== F.devicesKey({sharing: true, devices: [], pending: [{ip: '192.168.1.9', last_seen: 1}]}));
 check('devices: label is the name, or the address when unnamed', F.deviceLabel({ip: '192.168.1.2', name: "Anna's laptop"}) === "Anna's laptop" && F.deviceLabel({ip: '192.168.1.2', name: ''}) === '192.168.1.2');
+
+// Other devices: the sidebar row is plain (no subtitle); the add form is collapsed behind a button; the QR code panel
+check('devices: the sidebar row for Other devices has no subtitle line', /row\('devices', 'Other devices', \{\}\)/.test(setupjs) && !/devicesSubtitle/.test(setupjs));
+check('devices: Add a device is a button until pressed; Cancel and Escape end the edit and drop the draft', setupjs.includes("btn('Add a device', openDeviceForm, 'ghost'")
+  && setupjs.includes("SU.edit !== 'device-add'") && setupjs.includes("btn('Cancel', endEdit, 'ghost'") && /if \(was === 'device-add'\) SU\.devForm = \{ip: '', name: ''\}/.test(setupjs));
+check('devices: a successful add collapses the form and returns focus to its button', /SU\.devForm = \{ip: '', name: ''\}; SU\.edit = ''; SU\.opener = '';[\s\S]{0,160}dev-open/.test(setupjs));
+check('qr: the code is an img from the local route with a cache-busting query, alt text names the address', setupjs.includes("src: '/api/setup/devices/qr?a=' + encodeURIComponent(address)") && setupjs.includes("alt: 'QR code for ' + address"));
+check('qr: the toggle is labelled Show or Hide, the panel is collapsed by default, and the address error hides it', setupjs.includes("SU.qr ? 'Hide QR code' : 'Show QR code'") && setupjs.includes("aria-expanded") && /if \(SU\.qr\) kids\.push\(qrPanel/.test(setupjs));
+check('qr: the panel carries the scan caption and the tile is a token colour, not a hard-coded one', setupjs.includes('Scan with a phone camera on the same Wi-Fi. The phone then shows up under Waiting for approval.') && setupjs.includes('su-qr-tile') && html.includes('.su-qr-tile{max-width:100%;padding:var(--s-3);border-radius:var(--r-lg);background:var(--c-qr)}'));
+check('qr: SU.qr starts false and a missing address clears it', /devForm: \{ip: '', name: ''\}, devDirty: false, devErr: '', qr: false\}/.test(setupjs) && setupjs.includes('if (!d.address) SU.qr = false;'));
 
 function finish() {
   console.log(ok ? 'ALL PASS' : 'SOME FAILED'); process.exit(ok ? 0 : 1);

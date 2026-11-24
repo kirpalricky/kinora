@@ -120,6 +120,14 @@ function thumbWakeMs(items,now){ return items.length?Math.max(0,Math.min(...item
 function thumbMayRun(liveOn,queued){ return queued>0; }   // Live no longer pauses thumbnails; a busy camera answers 202 and the loader backs off
 // CSS state class of an event's thumbnail slot. The same size in every state; no text, so the list never jumps.
 function thumbSlotClass(state){ return state==='show'?'th-ok':state==='off'?'th-off':state==='failed'?'th-fail':state==='flight'?'th-load':'th-wait'; }
+// Theme choice: the cycle Auto -> Light -> Dark -> Auto and the words for the app bar's Theme button. Loaded by app.js
+// first, so setup.js (which loads second) reads these names; setup.js must not define them again.
+const THEMES=['system','light','dark'];
+const SU_THEME_NAME={system:'Auto',light:'Light',dark:'Dark'};
+function nextTheme(t){ return THEMES[(THEMES.indexOf(t)+1)%THEMES.length]; }
+function themeLabel(t){ return 'Theme: '+(SU_THEME_NAME[t]||'Auto'); }
+function themeAria(t){ return themeLabel(t)+'. Switch to '+SU_THEME_NAME[nextTheme(t)]; }
+function themeIconName(t){ return {system:'half',light:'sun',dark:'moon'}[t]||'half'; }
 /* player-logic:end */
 const WIN=120;
 let msgTimer=null;
@@ -829,42 +837,24 @@ addEventListener('blur',ptzStop);
 
 
 /* ---------- theme: System (default) / Light / Dark ---------- */
-const THEMES=['system','light','dark'];
-// The Theme group in the overflow menu: its three menuitemradio rows show the choice (aria-checked).
+// Paints the app bar's Theme button (icon and words for the current choice) and the page colours. The Settings
+// Appearance group (setup.js) is redrawn by setTheme, which calls this too.
 function applyTheme(t){
   const root=document.documentElement;
   if(t==='light'||t==='dark') root.setAttribute('data-theme',t); else root.removeAttribute('data-theme');
-  const eff=t==='light'||t==='dark'?t:'system';
-  document.querySelectorAll('#theme [data-t]').forEach(b=>b.setAttribute('aria-checked',String(b.dataset.t===eff)));
+  const tb=$('themebtn'), words=themeAria(t);
+  tb.title=words; tb.setAttribute('aria-label',words);
+  tb.querySelectorAll('[data-i]').forEach(s=>{ s.hidden=s.dataset.i!==themeIconName(t); });
   draw();                                   // the timeline canvas reads the colours when it draws
 }
 let theme='system'; try{ theme=localStorage.getItem('theme')||'system'; }catch(e){}
 if(!THEMES.includes(theme)) theme='system';
 applyTheme(theme);
-$('theme').addEventListener('click',e=>{ const b=e.target.closest('[data-t]'); if(!b) return;
-  theme=b.dataset.t;
-  try{ localStorage.setItem('theme',theme); }catch(err){}
-  applyTheme(theme);
-});
+$('themebtn').onclick=()=>{ theme=nextTheme(theme); try{ localStorage.setItem('theme',theme); }catch(err){}
+  applyTheme(theme); };
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>draw());   // system theme changed
 
-/* ---------- app bar overflow menu (Add camera, Cameras and passwords, Theme, About) ---------- */
-const menuItems=()=>[...$('pbmenu').querySelectorAll('[role="menuitem"],[role="menuitemradio"]')].filter(b=>!b.hidden);
-function openMenu(end){ const it=menuItems(); $('pbmenu').hidden=false; $('menubtn').setAttribute('aria-expanded','true');
-  (end?it[it.length-1]:it[0])?.focus(); }
-function closeMenu(refocus){ if($('pbmenu').hidden) return; $('pbmenu').hidden=true; $('menubtn').setAttribute('aria-expanded','false');
-  if(refocus) $('menubtn').focus(); }
-$('menubtn').onclick=()=>{ if($('pbmenu').hidden) openMenu(false); else closeMenu(true); };
-$('menubtn').addEventListener('keydown',e=>{ if(e.key==='ArrowDown'||e.key==='ArrowUp'){ e.preventDefault(); openMenu(e.key==='ArrowUp'); } });
-$('pbmenu').addEventListener('keydown',e=>{ const it=menuItems(), i=it.indexOf(document.activeElement), n=it.length;
-  if(e.key==='Escape'){ e.preventDefault(); closeMenu(true); }
-  else if(e.key==='Tab'){ closeMenu(false); $('menubtn').focus(); }   // Tab closes the menu and moves on from the button
-  else if(e.key==='ArrowDown'||e.key==='ArrowUp'){ e.preventDefault(); it[e.key==='ArrowDown'?(i+1)%n:(i-1+n)%n]?.focus(); }
-  else if(e.key==='Home'||e.key==='End'){ e.preventDefault(); it[e.key==='Home'?0:n-1]?.focus(); } });
-$('pbmenu').addEventListener('click',e=>{ if(e.target.closest('[role="menuitem"]')) closeMenu(false); });
-document.addEventListener('pointerdown',e=>{ if(!$('pbmenu').hidden && !$('pbmenu').contains(e.target) && e.target!==$('menubtn')) closeMenu(false); });
 $('addcam').onclick=()=>{ if(typeof openSetupAdd==='function') openSetupAdd(); };
-$('aboutbtn').onclick=()=>$('about').showModal();
 /* ---------- narrow screens: the camera switcher becomes one button and a sheet (the real #chips stays the source of truth) ---------- */
 $('camsel').onclick=()=>{ buildCamSheet(); $('camsheet').showModal(); };
 function buildCamSheet(){ const box=$('camlist'); box.replaceChildren();
@@ -877,8 +867,6 @@ function buildCamSheet(){ const box=$('camlist'); box.replaceChildren();
     m.onclick=()=>{ $('camsheet').close(); const t=[...$('chips').children].find(c=>c.dataset.id===m.dataset.id); if(t) t.click(); };
     box.append(m); }); }
 $('sheetadd').onclick=()=>{ $('camsheet').close(); if(typeof openSetupAdd==='function') openSetupAdd(); };
-$('aboutclose').onclick=()=>$('about').close();
-$('about').addEventListener('close',()=>$('menubtn').focus());
 
 markMode();
 applyRate();

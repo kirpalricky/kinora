@@ -616,6 +616,7 @@ LOCAL_ONLY_ROUTES = {
     ("POST", "/api/setup/verify"), ("PUT", "/api/cameras/order"), ("PATCH", "/api/cameras/{cam_id}"),
     ("POST", "/api/cameras/{cam_id}/credentials"), ("DELETE", "/api/cameras/{cam_id}"),
     ("GET", "/api/setup/devices"), ("POST", "/api/setup/devices"), ("DELETE", "/api/setup/devices/{ip}"),
+    ("GET", "/api/setup/devices/qr"),
     ("POST", "/api/setup/devices/dismiss"), ("PUT", "/api/setup/sharing"),
 }
 NO_BODY_ROUTES = {"/api/export/{id}/cancel"}   # body-less POST from the page: the Origin check still applies
@@ -785,6 +786,7 @@ def make_app(background=True):
         web.delete("/api/cameras/{cam_id}", setup_api.delete_camera),
         # other devices (kinora/services/devices_api.py): the allowed list, waiting devices, the sharing switch
         web.get("/api/setup/devices", devices_api.get_devices),
+        web.get("/api/setup/devices/qr", devices_api.address_qr),
         web.post("/api/setup/devices", devices_api.add_device),
         web.delete("/api/setup/devices/{ip}", devices_api.remove_device),
         web.post("/api/setup/devices/dismiss", devices_api.dismiss_device),

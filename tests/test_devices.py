@@ -219,6 +219,10 @@ class Middleware(StoreCase):
                              ("PUT", "/api/setup/sharing"), ("POST", "/api/setup/devices/dismiss")):
             self.assertEqual(self.call("192.168.1.43", path, method, headers={"Origin": f"http://{LAN}:{config.PORT}", "Content-Type": "application/json"})[0], 403, path)
 
+    def test_remote_cannot_get_the_qr_code(self):
+        devices.add("192.168.1.45")
+        self.assertEqual(self.call("192.168.1.45", "/api/setup/devices/qr")[0], 403)
+
     def test_bad_host_from_allowed_device_refused(self):
         devices.add("192.168.1.44")
         self.assertEqual(self.call("192.168.1.44", host="evil.example.com:%d" % config.PORT)[0], 403)
@@ -356,6 +360,31 @@ class Api(unittest.IsolatedAsyncioTestCase):
             view = devices_api.view(self.app)
         self.assertTrue(view["from_command_line"])
         self.assertTrue(view["listening"])
+
+    async def test_qr_code_of_the_listening_address(self):
+        devices.set_sharing(True)
+        self.app[devices_api.LISTEN]["runner"] = web.AppRunner(self.app)
+        await devices_api.listen(self.app)
+        resp = await self.http.request("GET", "/api/setup/devices/qr", headers={"Host": HOST})
+        body = await resp.read()
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(resp.headers["Content-Type"], "image/svg+xml")
+        self.assertEqual(resp.headers["Cache-Control"], "no-store")
+        self.assertTrue(body.startswith(b"<svg"))
+        self.assertGreater(len(body), 500)
+        self.assertNotIn(b"<script", body.lower())
+
+    async def test_qr_code_is_404_when_not_listening(self):
+        status, text = await self.call("GET", "/api/setup/devices/qr")
+        self.assertEqual(status, 404)
+        self.assertIn("not listening", text)
+
+    def test_qr_svg_is_dark_on_white_with_a_border(self):
+        svg = devices_api.qr_svg("http://192.168.1.20:80")
+        self.assertTrue(svg.startswith(b"<svg"))
+        self.assertIn(b'fill="#fff"', svg)
+        self.assertIn(b'stroke="#000"', svg)
+        self.assertGreater(len(svg), 500)
 
     async def test_bound_address_is_shown_and_a_changed_one_is_reported(self):
         devices.set_sharing(True)

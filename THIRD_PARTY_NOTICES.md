@@ -26,6 +26,7 @@ The upstream hls.js `LICENSE` file (v1.5.17) is included as `licenses/hls.js-LIC
 | platformdirs | 4.14.8 | MIT | https://github.com/tox-dev/platformdirs |
 | keyring | 25.7.0 | MIT | https://github.com/jaraco/keyring |
 | psutil | 7.2.2 | BSD-3-Clause | https://github.com/giampaolo/psutil |
+| segno | 1.6.6 | BSD-3-Clause (licence text in `licenses/segno-LICENSE.txt`) | https://github.com/heuer/segno/ |
 
 ## Transitive dependencies (installed in `.venv`)
 

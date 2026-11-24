@@ -6,9 +6,11 @@ When the server was started with --host / KINORA_HOST / --allow, the one socket 
 switch is read-only (from_command_line). Handlers are thin: validate, call kinora.devices, return the view.
 """
 import asyncio
+import io
 import ipaddress
 import socket
 
+import segno
 from aiohttp import web
 
 from kinora import config, devices
@@ -140,6 +142,22 @@ async def add_device(request):
         raise web.HTTPBadRequest(text="ip is required")
     devices.add(body["ip"], body.get("name", ""))
     return web.json_response(view(request.app))
+
+
+def qr_svg(address):
+    """The address as an SVG QR code: error level M, a 4-module border, dark modules on white (it scans in dark mode too)."""
+    buf = io.BytesIO()
+    segno.make(address, error="m").save(buf, kind="svg", scale=1, border=4, dark="#000", light="#fff", xmldecl=False, nl=False)
+    return buf.getvalue()
+
+
+async def address_qr(request):
+    """GET /api/setup/devices/qr: the QR code of the address the network socket is listening on (no input). 404 when not."""
+    address = view(request.app)["address"]
+    if not address:
+        return web.Response(status=404, text="Kinora is not listening on your network, so there is no address to show.",
+                            content_type="text/plain")
+    return web.Response(body=qr_svg(address), content_type="image/svg+xml", headers={"Cache-Control": "no-store"})
 
 
 async def remove_device(request):

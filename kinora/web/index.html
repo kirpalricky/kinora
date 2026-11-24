@@ -11,6 +11,7 @@
   --c-accent:#4640B8;--c-accent-hover:#38329C;--c-accent-text:#4640B8;--c-accent-soft:#E8E8F8;--c-on-accent:#FFFFFF;
   --c-ok:#1F7A4D;--c-ok-soft:#E6F4EC;--c-warn:#8A5300;--c-warn-soft:#FBF0DC;--c-bad:#B3261E;--c-bad-soft:#FBE9E7;
   --c-on-media:#FFFFFF;   /* text over the video (not theme-dependent) */
+  --c-qr:#FFFFFF;   /* the white tile of the QR code (Settings > Other devices): white in both themes so it scans */
   --bg:var(--c-bg);--fg:var(--c-text);--mut:var(--c-text-2);--accent:var(--c-accent);--sel:var(--c-accent);
   --card:var(--c-surface-2);--line:var(--c-line);
   --track:#EEEEF4;--rec:#9FA1B8;--err:var(--c-bad);
@@ -82,17 +83,11 @@ video{width:100%;height:100%;display:block;background:#000;object-fit:contain}
 .pb-icon-btn:hover,.pb-icon-btn[aria-expanded="true"]{background:var(--c-surface-2);color:var(--c-text)}
 .pb-ico{width:20px;height:20px;display:block;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
 .pb-dots{stroke-width:3}
-.pb-menuwrap{position:relative;margin-left:auto;flex:none}
-.pb-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:30;min-width:240px;padding:4px;background:var(--c-surface);
-  border:1px solid var(--c-line);border-radius:var(--r-md);box-shadow:var(--e-1)}
+.pb-bar-r{display:flex;align-items:center;gap:var(--s-2);margin-left:auto;flex:none}
 .pb-mi{display:flex;align-items:center;width:100%;min-height:40px;padding:0 12px;border:0;border-radius:var(--r-sm);background:transparent;
   color:var(--c-text);font:inherit;font-size:14px;line-height:20px;text-align:left;cursor:pointer}
 .pb-mi:hover,.pb-mi:focus-visible{background:var(--c-surface-2)}
-.pb-mi[aria-checked="true"]{color:var(--c-accent-text);font-weight:600}
-.pb-mi[aria-checked="true"]::after{content:"\2713";margin-left:auto}
-.pb-grp-h{padding:8px 12px 4px;font-size:12px;line-height:16px;font-weight:500;color:var(--c-text-2)}
 .pb-sep{height:1px;margin:4px 0;border:0;background:var(--c-line)}
-.pb-foot{margin:var(--s-3) 0 0;font-size:13px;line-height:18px;color:var(--c-text-2)}
 
 /* transport bar (56px): mode control, speed (Recorded only), date stepper and Export on the right */
 /* transport bar, status line and timeline share one card under the video (12px below it) */
@@ -493,14 +488,20 @@ details[open]>summary>.su-chev{transform:rotate(90deg)}
 }
 /* the toast clears the wizard's sticky footer on phones (only when a footer is shown) */
 @media(max-width:599px){#setup:has(#setupfoot:not(:empty)) .su-toast{bottom:96px}}
+/* QR code of the Other devices address: a white tile (--c-qr), 200px, never wider than its column */
+.su-qr{display:flex;flex-direction:column;align-items:center;gap:var(--s-3);text-align:center}
+.su-qr-tile{max-width:100%;padding:var(--s-3);border-radius:var(--r-lg);background:var(--c-qr)}
+.su-qr-img{display:block;width:200px;max-width:100%;height:auto}
 /* transport: the right group (date stepper, Export) sits on its own full-width row in panes narrower than 840px */
 main{container-type:inline-size}
 @container (max-width:839px){.tx-r{flex:1 0 100%;justify-content:space-between;margin-left:0}}
 /* Live/Recorded segmented control: selected segment is raised on the track */
-/* settings: gear button with its label at 960px and up, icon only below */
-.pb-settings{height:36px;padding:0 12px;gap:var(--s-2);background:transparent;border-color:transparent;color:var(--c-text-2)}
-.pb-settings:hover,.pb-settings[aria-expanded="true"]{background:var(--c-surface-2);color:var(--c-text);border-color:var(--c-line)}
-.pb-settings .pb-ico{width:20px;height:20px}
+/* right group of the app bar: Theme (icon only) and Settings (gear, label at 960px and up); 36px ghost buttons, 44px below 600px */
+.pb-settings,.pb-theme{height:36px;padding:0 12px;gap:var(--s-2);background:transparent;border-color:transparent;color:var(--c-text-2)}
+.pb-theme{width:36px;padding:0}
+.pb-settings:hover,.pb-theme:hover{background:var(--c-surface-2);color:var(--c-text);border-color:var(--c-line)}
+.pb-settings .pb-ico,.pb-theme .pb-ico{width:20px;height:20px}
+.pb-theme .pb-half{fill:currentColor}
 .pb-settings-lbl{display:none}
 @media(min-width:960px){.pb-settings-lbl{display:inline}}
 /* camera switcher button (600px and below) */
@@ -566,11 +567,9 @@ main{container-type:inline-size}
   .pb-name,#addcam,#chips{display:none}
   .pb-camsel{display:inline-flex}
   .pb-switch{flex:0 1 auto;min-width:0}
-  .pb-settings{width:44px;height:44px;padding:0}
+  .pb-settings,.pb-theme{width:44px;height:44px;padding:0}
   .pb-sound{width:44px;height:44px}
   .pb-mi{min-height:52px}
-  .pb-menu{position:fixed;left:0;right:0;top:auto;bottom:0;min-width:0;z-index:40;padding:var(--s-2) var(--s-2) calc(var(--s-2) + env(safe-area-inset-bottom));
-    border-radius:var(--r-lg) var(--r-lg) 0 0;box-shadow:var(--e-1)}
   #camsheet{position:fixed;top:auto;bottom:0;left:0;right:0;margin:0;width:100%;max-width:none;border-radius:var(--r-lg) var(--r-lg) 0 0;
     padding:var(--s-5) var(--s-4) calc(var(--s-4) + env(safe-area-inset-bottom))}
   #camlist .pb-mi[aria-current="true"]{color:var(--c-accent-text);font-weight:600}
@@ -622,20 +621,9 @@ main{container-type:inline-size}
   <div class="pb-brand"><svg class="pb-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect class="pb-mk-b" x="3" y="3" width="14" height="14" rx="4"/><rect class="pb-mk-f" x="7" y="7" width="14" height="14" rx="4"/></svg><span class="pb-name">Kinora</span></div>
   <nav class="pb-switch" aria-label="Cameras"><button class="pb-camsel" id="camsel" type="button" aria-haspopup="dialog" aria-controls="camsheet"><span id="camname">Cameras</span><span class="pb-chev" aria-hidden="true">▾</span></button><div id="chips" role="tablist" aria-label="Cameras"></div></nav>
   <button class="pb-btn ghost" id="addcam" type="button" title="Add a camera">+ Add camera</button>
-  <div class="pb-menuwrap">
-    <button class="pb-btn pb-settings" id="menubtn" type="button" aria-label="Settings" aria-haspopup="menu" aria-expanded="false" aria-controls="pbmenu" title="Settings"><svg class="pb-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="pb-settings-lbl">Settings</span></button>
-    <div class="pb-menu" id="pbmenu" role="menu" aria-label="Playback menu" hidden>
-      <button class="pb-mi" id="settingsbtn" type="button" role="menuitem" tabindex="-1" title="Cameras, passwords and app settings" hidden>Cameras and passwords</button>
-      <hr class="pb-sep" role="separator">
-      <div id="theme" role="group" aria-labelledby="pbthl">
-        <div class="pb-grp-h" id="pbthl">Theme</div>
-        <button class="pb-mi" type="button" role="menuitemradio" aria-checked="false" data-t="system" tabindex="-1">Auto</button>
-        <button class="pb-mi" type="button" role="menuitemradio" aria-checked="false" data-t="light" tabindex="-1">Light</button>
-        <button class="pb-mi" type="button" role="menuitemradio" aria-checked="false" data-t="dark" tabindex="-1">Dark</button>
-      </div>
-      <hr class="pb-sep" role="separator">
-      <button class="pb-mi" id="aboutbtn" type="button" role="menuitem" tabindex="-1">About Playback</button>
-    </div>
+  <div class="pb-bar-r">
+    <button class="pb-btn pb-theme" id="themebtn" type="button" aria-label="Theme" title="Theme"><svg class="pb-ico" data-i="half" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><path class="pb-half" d="M12 3.5a8.5 8.5 0 0 1 0 17z"/></svg><svg class="pb-ico" data-i="sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg><svg class="pb-ico" data-i="moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg></button>
+    <button class="pb-btn pb-settings" id="settingsbtn" type="button" aria-label="Settings" title="Settings"><svg class="pb-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="pb-settings-lbl">Settings</span></button>
   </div>
 </header>
 <div id="cols">
@@ -695,12 +683,6 @@ main{container-type:inline-size}
   <hr class="pb-sep" role="separator">
   <button class="pb-mi" id="sheetadd" type="button">+ Add camera</button>
 </dialog>
-<dialog id="about" aria-labelledby="abouttitle">
-  <h2 id="abouttitle">Kinora</h2>
-  <p>Scrubbable playback of the SD cards in your Tapo cameras, on this computer.</p>
-  <p class="pb-foot">Unofficial software. Not made by, affiliated with or endorsed by TP-Link or Tapo, and not supported by TP-Link. Use at your own risk.</p>
-  <div class="row"><button id="aboutclose" type="button">Close</button></div>
-</dialog>
 <dialog id="exp">
   <h2 id="exptitle">Export</h2>
   <label for="expstart">From</label><input type="datetime-local" step="1" id="expstart">
@@ -715,5 +697,5 @@ main{container-type:inline-size}
   <div class="row"><button id="expcancel">Close</button><button class="go" id="expgo">Export</button></div>
 </dialog>
 <script src="/static/hls.min.js"></script>
-<script src="/static/app.js?v=67"></script>
-<script src="/static/setup.js?v=13"></script></body></html>
+<script src="/static/app.js?v=68"></script>
+<script src="/static/setup.js?v=14"></script></body></html>
