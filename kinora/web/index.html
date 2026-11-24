@@ -509,7 +509,6 @@ main{container-type:inline-size}
 @media(min-width:960px){.pb-settings{width:auto;padding:0 12px}}
 .pb-settings:hover,.pb-theme:hover{background:var(--c-surface-2);color:var(--c-text);border-color:var(--c-line)}
 .pb-settings .pb-ico,.pb-theme .pb-ico{width:20px;height:20px}
-.pb-theme .pb-half{fill:currentColor}
 .pb-settings-lbl{display:none}
 @media(min-width:960px){.pb-settings-lbl{display:inline}}
 /* camera switcher button (600px and below) */
@@ -630,7 +629,7 @@ main{container-type:inline-size}
   <nav class="pb-switch" aria-label="Cameras"><button class="pb-camsel" id="camsel" type="button" aria-haspopup="dialog" aria-controls="camsheet"><span id="camname">Cameras</span><span class="pb-chev" aria-hidden="true">▾</span></button><div id="chips" role="tablist" aria-label="Cameras"></div></nav>
   <button class="pb-btn ghost" id="addcam" type="button" title="Add a camera">+ Add camera</button>
   <div class="pb-bar-r">
-    <button class="pb-btn pb-theme" id="themebtn" type="button" aria-label="Theme" title="Theme"><svg class="pb-ico" data-i="half" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><path class="pb-half" d="M12 3.5a8.5 8.5 0 0 1 0 17z"/></svg><svg class="pb-ico" data-i="sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg><svg class="pb-ico" data-i="moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg></button>
+    <button class="pb-btn pb-theme" id="themebtn" type="button" aria-label="Theme" title="Theme"><svg class="pb-ico" data-i="auto" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v3M8.5 19.5h7"/></svg><svg class="pb-ico" data-i="sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg><svg class="pb-ico" data-i="moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg></button>
     <span class="pb-sr" id="themestatus" role="status"></span>
     <button class="pb-btn pb-settings" id="settingsbtn" type="button" aria-label="Settings" title="Settings"><svg class="pb-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="pb-settings-lbl">Settings</span></button>
   </div>
@@ -706,5 +705,5 @@ main{container-type:inline-size}
   <div class="row"><button id="expcancel">Close</button><button class="go" id="expgo">Export</button></div>
 </dialog>
 <script src="/static/hls.min.js"></script>
-<script src="/static/app.js?v=69"></script>
+<script src="/static/app.js?v=70"></script>
 <script src="/static/setup.js?v=18"></script></body></html>

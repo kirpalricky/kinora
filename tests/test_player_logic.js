@@ -151,7 +151,7 @@ check('theme cycle: next choice from each value wraps Auto -> Light -> Dark -> A
 check('theme cycle: THEMES order is the same as the cycle', sh(F.THEMES) === sh(['system', 'light', 'dark']));
 check('theme label per choice', F.themeLabel('system') === 'Theme: Auto' && F.themeLabel('light') === 'Theme: Light' && F.themeLabel('dark') === 'Theme: Dark');
 check('theme aria names the current choice and the next one', F.themeAria('system') === 'Theme: Auto. Switch to Light' && F.themeAria('light') === 'Theme: Light. Switch to Dark' && F.themeAria('dark') === 'Theme: Dark. Switch to Auto');
-check('theme icon per choice: half-circle, sun, moon', F.themeIconName('system') === 'half' && F.themeIconName('light') === 'sun' && F.themeIconName('dark') === 'moon' && F.themeIconName('zzz') === 'half');
+check('theme icon per choice: monitor (auto), sun, moon', F.themeIconName('system') === 'auto' && F.themeIconName('light') === 'sun' && F.themeIconName('dark') === 'moon' && F.themeIconName('zzz') === 'auto');
 check('theme: the app bar Theme button is icon only (no text node inside it, SVGs removed first)', (() => {
   const btnMarkup = (html.match(/<button[^>]*id="themebtn"[\s\S]*?<\/button>/) || [''])[0];
   return btnMarkup.length > 0 && btnMarkup.replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<[^>]+>/g, '').trim() === '';
@@ -167,17 +167,17 @@ check('app bar: the right group holds Theme then Settings', html.indexOf('id="th
 check('app bar: setup.js binds the Settings button to openSetup and nothing else in app.js binds it', /byId\('settingsbtn'\)\.addEventListener\('click', \(\) => openSetup\('settings'\)\)/.test(fs.readFileSync(__dirname + '/../kinora/web/static/setup.js', 'utf8')) && !/settingsbtn/.test(src));
 check('theme: applyTheme paints the Theme button and reads the shared helpers; no #theme radio group left in the menu', /function applyTheme[\s\S]*themebtn[\s\S]*themeIconName/.test(src) && !/\$\('theme'\)/.test(src));
 check('theme: setup.js does not define the theme helpers again (app.js loads first and owns them)', !/function (themeLabel|themeAria|themeIconName|nextTheme)|const (SU_THEME_NAME|THEMES) /.test(fs.readFileSync(__dirname + '/../kinora/web/static/setup.js', 'utf8')));
-check('versions: index.html loads app.js and setup.js with bumped query strings', /app\.js\?v=69"/.test(html) && /setup\.js\?v=18"/.test(html));
+check('versions: index.html loads app.js and setup.js with bumped query strings', /app\.js\?v=70"/.test(html) && /setup\.js\?v=18"/.test(html));
 
 // Behaviour of applyTheme (app.js) on a stub of the Theme button: the three icon SVGs keep their hidden attribute
 // state, the words and the polite status follow the choice. The code is app.js's own source, not a copy.
 (() => {
   const applySrc = src.slice(src.indexOf('let themePainted'), src.indexOf("let theme='system'"));
   const attrsOf = init => new Map(init);
-  const icon = name => ({dataset: {i: name}, attrs: attrsOf(name === 'half' ? [] : [['hidden', '']]),
+  const icon = name => ({dataset: {i: name}, attrs: attrsOf(name === 'auto' ? [] : [['hidden', '']]),
     hasAttribute(n) { return this.attrs.has(n); },
     toggleAttribute(n, force) { const on = force === undefined ? !this.attrs.has(n) : !!force; on ? this.attrs.set(n, '') : this.attrs.delete(n); return on; }});
-  const icons = [icon('half'), icon('sun'), icon('moon')];   // the markup: half shown, sun and moon hidden
+  const icons = [icon('auto'), icon('sun'), icon('moon')];   // the markup: auto shown, sun and moon hidden
   const bar = {title: '', labels: {}, setAttribute(n, v) { this.labels[n] = v; }, querySelectorAll() { return icons; }};
   const status = {textContent: ''};
   const ctx = {document: {documentElement: {setAttribute() {}, removeAttribute() {}}}, draw() {},
@@ -186,10 +186,11 @@ check('versions: index.html loads app.js and setup.js with bumped query strings'
   vm.runInContext(block + ';' + applySrc + ';this.applyTheme = applyTheme;', ctx);
   const shown = () => icons.filter(i => !i.hasAttribute('hidden')).map(i => i.dataset.i).join(',');
   ctx.applyTheme('system');
-  check('theme icon: Auto shows only the half-circle on load', shown() === 'half');
+  check('theme icon: Auto shows only the monitor on load', shown() === 'auto');
   check('theme icon: Light shows only the sun (the hidden attribute is removed and set, not left behind)', (ctx.applyTheme('light'), shown() === 'sun'));
   check('theme icon: Dark shows only the moon', (ctx.applyTheme('dark'), shown() === 'moon'));
-  check('theme icon: back to Auto shows only the half-circle again', (ctx.applyTheme('system'), shown() === 'half'));
+  check('theme icon: back to Auto shows only the monitor again', (ctx.applyTheme('system'), shown() === 'auto'));
+check('theme icon: the three icons are one stroke family (no fill, same box) and the Auto icon is a monitor', /data-i="auto" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="12" rx="2"\/><path d="M12 16v3M8.5 19.5h7"\/><\/svg>/.test(html) && !/pb-half|data-i="half"/.test(html) && !/pb-theme \.pb-half/.test(html));
   check('theme button: aria-label and title name the choice and the next one', bar.labels['aria-label'] === 'Theme: Auto. Switch to Light' && bar.title === 'Theme: Auto. Switch to Light');
   check('theme status: the page load does not announce, a change does', status.textContent === 'Theme: Auto' && (ctx.applyTheme('light'), status.textContent === 'Theme: Light'));
 })();

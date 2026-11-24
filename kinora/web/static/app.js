@@ -127,7 +127,7 @@ const SU_THEME_NAME={system:'Auto',light:'Light',dark:'Dark'};
 function nextTheme(t){ return THEMES[(THEMES.indexOf(t)+1)%THEMES.length]; }
 function themeLabel(t){ return 'Theme: '+(SU_THEME_NAME[t]||'Auto'); }
 function themeAria(t){ return themeLabel(t)+'. Switch to '+SU_THEME_NAME[nextTheme(t)]; }
-function themeIconName(t){ return {system:'half',light:'sun',dark:'moon'}[t]||'half'; }
+function themeIconName(t){ return {system:'auto',light:'sun',dark:'moon'}[t]||'auto'; }
 /* player-logic:end */
 const WIN=120;
 let msgTimer=null;
