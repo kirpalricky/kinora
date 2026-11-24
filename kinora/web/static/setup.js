@@ -1483,25 +1483,29 @@ async function setSharing(on) {
 }
 function addressBox(d) {
   const kids = [];
-  if (!d.address) SU.qr = false;   // the QR code is of the address the network socket listens on: no address, no code
-  if (d.address) {
-    const qrBtn = btn(SU.qr ? 'Hide QR code' : 'Show QR code', toggleQr, 'ghost sm',
-      {'data-focus': 'qr-toggle', 'aria-expanded': SU.qr ? 'true' : 'false', 'aria-controls': SU.qr ? 'su-qr-panel' : undefined});
-    kids.push(h('div', {class: 'su-card-s'}, cred('Open this on the other computer',
-      h('span', {class: 'su-mono', text: d.address}), [btn('Copy', () => copyAddress(d.address), 'ghost sm', {'data-focus': 'copy-address'}), qrBtn], 'su-cred-addr')));
-    if (SU.qr) kids.push(qrPanel(d.address));
-  }
+  if (!d.address) SU.qr = false;   // the QR code is of the address the network socket listens on: no address, no card
+  if (d.address) kids.push(h('div', {class: 'su-card-s'},
+    cred('Open this on the other computer', h('span', {class: 'su-mono', text: d.address}),
+      btn('Copy', () => copyAddress(d.address), 'ghost sm', {'data-focus': 'copy-address'}), 'su-cred-addr'),
+    qrDisclosure(d.address)));
   if (d.address_error) kids.push(h('p', {class: 'su-foot-note', text: d.address_error}));
   kids.push(errAt('address'));
   return h('div', {class: 'su-stack'}, kids);
 }
-function toggleQr() { SU.qr = !SU.qr; renderView('[data-focus="qr-toggle"]'); }
-// The QR code of the address, from GET /api/setup/devices/qr (SVG). The query only gives each address its own image URL.
-function qrPanel(address) {
-  return h('div', {class: 'su-qr', id: 'su-qr-panel'},
-    h('div', {class: 'su-qr-tile'}, h('img', {class: 'su-qr-img', src: '/api/setup/devices/qr?a=' + encodeURIComponent(address),
-      alt: 'QR code for ' + address, width: '200', height: '200'})),
-    h('p', {class: 'su-foot-note', text: 'Scan with a phone camera on the same Wi-Fi. The phone then shows up under Waiting for approval.'}));
+// The QR code for a phone: a native disclosure under the address, open exactly when SU.qr says so. The toggle event keeps
+// SU.qr in step with the native state (no re-render). Nothing in the body is a tab stop.
+function qrDisclosure(address) {
+  const img = h('img', {class: 'su-qr-img', src: '/api/setup/devices/qr?a=' + encodeURIComponent(address), alt: 'QR code for ' + address,
+    width: '160', height: '160', loading: 'lazy'});
+  img.addEventListener('error', () => img.replaceWith(h('p', {class: 'su-hint', text: 'The QR code did not load. Type the address on your phone instead.'})));
+  const det = h('details', {class: 'su-more-d', open: !!SU.qr},
+    h('summary', {'data-focus': 'qr-toggle'}, h('span', {text: 'QR code for a phone'}), icon('chevron', 'su-chev')),
+    h('div', {class: 'su-more-body su-qr'}, img,
+      h('div', {class: 'su-qr-text'},
+        h('p', {class: 'su-qr-do', text: "Point your phone's camera at this code."}),
+        h('p', {class: 'su-hint', text: 'Your phone must be on this Wi-Fi. Then allow it under Waiting for approval.'}))));
+  det.addEventListener('toggle', () => { SU.qr = det.open; });
+  return det;
 }
 async function copyAddress(addr) {
   delete SU.errs.address;

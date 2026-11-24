@@ -264,12 +264,12 @@ check('devices: the sidebar row for Other devices has no subtitle line', /row\('
 check('devices: Add a device is a button until pressed; Cancel and Escape end the edit and drop the draft', setupjs.includes("class: 'su-btn ghost', 'data-focus': 'dev-open', onclick: openDeviceForm}, icon('plus', 'su-btn-ico'), 'Add a device'")
   && setupjs.includes("SU.edit !== 'device-add'") && setupjs.includes("btn('Cancel', endEdit, 'ghost'") && /if \(was === 'device-add'\) SU\.devForm = \{ip: '', name: ''\}/.test(setupjs));
 check('devices: a successful add collapses the form and returns focus to its button', /SU\.devForm = \{ip: '', name: ''\}; SU\.edit = ''; SU\.opener = '';[\s\S]{0,160}dev-open/.test(setupjs));
-check('qr: the code is an img from the local route with a cache-busting query, alt text names the address', setupjs.includes("src: '/api/setup/devices/qr?a=' + encodeURIComponent(address)") && setupjs.includes("alt: 'QR code for ' + address"));
-check('qr: the toggle is labelled Show or Hide, the panel is collapsed by default, and the address error hides it', setupjs.includes("SU.qr ? 'Hide QR code' : 'Show QR code'") && setupjs.includes("aria-expanded") && /if \(SU\.qr\) kids\.push\(qrPanel/.test(setupjs));
-check('qr: the panel carries the scan caption and the tile is a token colour, not a hard-coded one', setupjs.includes('Scan with a phone camera on the same Wi-Fi. The phone then shows up under Waiting for approval.') && setupjs.includes('su-qr-tile') && html.includes('.su-qr-tile{max-width:100%;padding:var(--s-3);border-radius:var(--r-lg);background:var(--c-qr)}'));
-check('qr: SU.qr starts false and a missing address clears it', /devForm: \{ip: '', name: ''\}, devDirty: false, devErr: '', qr: false\}/.test(setupjs) && setupjs.includes('if (!d.address) SU.qr = false;'));
-check('address row: the address is nowrap on its own line, the buttons wrap under it; IPs in cred values never break', html.includes('.su-cred-v .su-mono{white-space:nowrap}') && html.includes('.su-cred.su-cred-addr{display:flex;flex-wrap:wrap') && html.includes('.su-cred-addr>.su-cred-v{flex:1 1 auto;min-width:0;max-width:100%;overflow-x:auto;overflow-wrap:normal;white-space:nowrap}') && setupjs.includes("'su-cred-addr')));"));
+check('address row: the address is nowrap on its own line, the buttons wrap under it; IPs in cred values never break', html.includes('.su-cred-v .su-mono{white-space:nowrap}') && html.includes('.su-cred.su-cred-addr{display:flex;flex-wrap:wrap') && html.includes('.su-cred-addr>.su-cred-v{flex:1 1 auto;min-width:0;max-width:100%;overflow-x:auto;overflow-wrap:normal;white-space:nowrap}') && setupjs.includes("'su-cred-addr'),"));
 check('add a device: a ghost button with the plus icon, not a link', html.includes('.su-btn-ico{width:18px;height:18px;flex:none}'));
+check('qr: the disclosure is a native details with the agreed copy, and the stale toggle and tile are gone', setupjs.includes("h('details', {class: 'su-more-d', open: !!SU.qr}")
+  && setupjs.includes("'QR code for a phone'") && setupjs.includes("det.addEventListener('toggle', () => { SU.qr = det.open; });")
+  && !/toggleQr|qrPanel|su-qr-panel|su-qr-tile|Show QR code|Hide QR code/.test(setupjs) && !/su-qr-tile|su-qr-panel/.test(html));
+check('qr: SU.qr starts false, and a missing address clears it', /devForm: \{ip: '', name: ''\}, devDirty: false, devErr: '', qr: false\}/.test(setupjs) && setupjs.includes('if (!d.address) SU.qr = false;'));
 
 function finish() {
   console.log(ok ? 'ALL PASS' : 'SOME FAILED'); process.exit(ok ? 0 : 1);

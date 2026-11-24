@@ -167,7 +167,7 @@ check('app bar: the right group holds Theme then Settings', html.indexOf('id="th
 check('app bar: setup.js binds the Settings button to openSetup and nothing else in app.js binds it', /byId\('settingsbtn'\)\.addEventListener\('click', \(\) => openSetup\('settings'\)\)/.test(fs.readFileSync(__dirname + '/../kinora/web/static/setup.js', 'utf8')) && !/settingsbtn/.test(src));
 check('theme: applyTheme paints the Theme button and reads the shared helpers; no #theme radio group left in the menu', /function applyTheme[\s\S]*themebtn[\s\S]*themeIconName/.test(src) && !/\$\('theme'\)/.test(src));
 check('theme: setup.js does not define the theme helpers again (app.js loads first and owns them)', !/function (themeLabel|themeAria|themeIconName|nextTheme)|const (SU_THEME_NAME|THEMES) /.test(fs.readFileSync(__dirname + '/../kinora/web/static/setup.js', 'utf8')));
-check('versions: index.html loads app.js and setup.js with bumped query strings', /app\.js\?v=69"/.test(html) && /setup\.js\?v=16"/.test(html));
+check('versions: index.html loads app.js and setup.js with bumped query strings', /app\.js\?v=69"/.test(html) && /setup\.js\?v=17"/.test(html));
 
 // Behaviour of applyTheme (app.js) on a stub of the Theme button: the three icon SVGs keep their hidden attribute
 // state, the words and the polite status follow the choice. The code is app.js's own source, not a copy.

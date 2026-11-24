@@ -1,5 +1,5 @@
 // Behavioural test of the Settings DOM code that the pure setup-logic test cannot reach: the Add a device draft, the
-// edit error clearing, the theme fallbacks and the QR code panel. The named functions are read from static/setup.js and
+// edit error clearing, the theme fallbacks and the QR code disclosure. The named functions are read from static/setup.js and
 // run in a vm context with a minimal DOM stub (no browser, no network). Run: node tests/test_setup_dom.js
 const fs = require('fs'), vm = require('vm');
 const dir = __dirname + '/../kinora/web/static/';
@@ -29,6 +29,7 @@ class El extends Node {
   addEventListener(ev, fn) { this.listeners[ev] = fn; }
   append(...kids) { this.children.push(...kids); }
   focus() { this.focused = true; }
+  replaceWith(n) { this.replacedBy = n; }
 }
 const walk = (node, visit) => { if (!(node instanceof El)) return; visit(node); node.children.forEach(c => walk(c, visit)); };
 const find = (root, pred) => { const out = []; walk(root, n => { if (pred(n)) out.push(n); }); return out; };
@@ -41,7 +42,7 @@ function load(names, withApp) {
     SU: {sel: 'devices', view: 'settings', screen: 'list', edit: '', opener: '', errs: {}, saved: '', qr: false,
       devForm: {ip: '', name: ''}, devDirty: false, devErr: '', newRow: null, add: null, changed: false, playable: true, prevSel: '', dev: null},
     renderView() { ctx.renders.push(1); },
-    narrow: () => false, loadDevices() {}, copyAddress() {},
+    narrow: () => false, loadDevices() {}, copyAddress() {}, icon: () => new El('svg'),
     history: {pushState() {}}, localStorage: {setItem() {}},
     location: {reload() { ctx.reloaded = true; }},
     byId: id => (ctx.els[id] = ctx.els[id] || new El(id)), els: {},
@@ -52,7 +53,7 @@ function load(names, withApp) {
   vm.runInContext(names.map(fnSource).join('\n'), ctx);
   return ctx;
 }
-const FUNCS = ['h', 'btn', 'cred', 'errAt', 'addressBox', 'qrPanel', 'toggleQr', 'startEdit', 'endEdit', 'openDeviceForm',
+const FUNCS = ['h', 'btn', 'cred', 'errAt', 'addressBox', 'qrDisclosure', 'startEdit', 'endEdit', 'openDeviceForm',
   'go', 'selectPane', 'closeSetup', 'setTheme', 'themeGroup', 'themeKeys', 'themeNow', 'themeChoices', 'themeWord'];
 const draft = {ip: '192.168.1.5', name: 'half typed'};
 const empty = d => d.ip === '' && d.name === '';
@@ -81,27 +82,50 @@ const empty = d => d.ip === '' && d.name === '';
   check('errors: other forms still start with a clean slate', Object.keys(c.SU.errs).length === 0);
 }
 
-// ---- the QR code panel: toggle label, aria-controls, the image, and the address error hides it ----
+// ---- the QR code: one card, Copy the only action in row 1, a native disclosure that follows SU.qr ----
 {
   const c = load(FUNCS, true);
   const url = 'http://192.168.1.5:80';
-  const toggleOf = tree => find(tree, n => n.attrs['data-focus'] === 'qr-toggle')[0];
+  const dets = tree => find(tree, n => n.tagName === 'details');
+  const buttonsIn = n => find(n, x => x.tagName === 'button');
   c.SU.qr = false;
   let tree = c.addressBox({address: url, address_error: null});
-  let t = toggleOf(tree);
-  check('qr: collapsed by default, the toggle says Show and names no panel', t.children.includes('Show QR code') && t.attrs['aria-expanded'] === 'false' && t.attrs['aria-controls'] === undefined);
-  check('qr: no panel while collapsed', find(tree, n => n.attrs.id === 'su-qr-panel').length === 0);
+  const card = find(tree, n => n.className === 'su-card-s')[0];
+  check('qr: one address card holds the address row and the disclosure', !!card && card.children.length === 2);
+  const row1 = card.children[0];
+  check('qr: row 1 has Copy as its only button (data-focus copy-address)', buttonsIn(row1).length === 1 && buttonsIn(row1)[0].attrs['data-focus'] === 'copy-address' && buttonsIn(row1)[0].children.includes('Copy'));
+  let det = dets(tree)[0];
+  check('qr: collapsed by default when SU.qr is false (no open attribute)', !!det && det.attrs.open === undefined && det.className === 'su-more-d');
+  check('qr: the summary names the disclosure and carries the qr-toggle focus key', find(det, n => n.tagName === 'summary' && n.attrs['data-focus'] === 'qr-toggle').length === 1
+    && find(det, n => n.tagName === 'span' && n.textContent === 'QR code for a phone').length === 1);
+  check('qr: no aria-expanded or aria-controls anywhere (the native disclosure carries its own state)', find(tree, n => n.attrs['aria-expanded'] !== undefined || n.attrs['aria-controls'] !== undefined).length === 0);
+  const img = find(det, n => n.tagName === 'img')[0];
+  check('qr: the image is the route with the address as cache key, 160px, lazy, alt names the address', !!img
+    && img.attrs.src === '/api/setup/devices/qr?a=' + encodeURIComponent(url) && img.attrs.alt === 'QR code for ' + url
+    && img.attrs.width === '160' && img.attrs.height === '160' && img.attrs.loading === 'lazy');
+  check('qr: the body says what to do and the Wi-Fi rule, in the agreed classes', find(det, n => n.className === 'su-qr-do' && n.textContent === "Point your phone's camera at this code.").length === 1
+    && find(det, n => n.className === 'su-hint' && n.textContent === 'Your phone must be on this Wi-Fi. Then allow it under Waiting for approval.').length === 1);
+  const body = find(det, n => n.className === 'su-more-body su-qr')[0];
+  check('qr: nothing in the body is a tab stop (the summary is the only one)', !!body && find(body, n => ['button', 'a', 'input', 'select', 'textarea'].includes(n.tagName) || n.attrs.tabindex !== undefined).length === 0);
+  // SU.qr follows the native toggle (the browser fires toggle after open changes; the stub sets open and fires it)
+  det.open = true; det.listeners.toggle();
+  check('qr: opening the disclosure sets SU.qr (no re-render needed)', c.SU.qr === true);
+  det.open = false; det.listeners.toggle();
+  check('qr: closing it clears SU.qr', c.SU.qr === false);
   c.SU.qr = true;
   tree = c.addressBox({address: url, address_error: null});
-  t = toggleOf(tree);
-  check('qr: open, the toggle says Hide and aria-controls names the panel', t.children.includes('Hide QR code') && t.attrs['aria-expanded'] === 'true' && t.attrs['aria-controls'] === 'su-qr-panel');
-  const panel = find(tree, n => n.attrs.id === 'su-qr-panel')[0];
-  const img = panel && find(panel, n => n.tagName === 'img')[0];
-  check('qr: the panel holds an img of the route with the address as cache key, and the alt text names the address',
-    !!img && img.attrs.src === '/api/setup/devices/qr?a=' + encodeURIComponent(url) && img.attrs.alt === 'QR code for ' + url);
-  check('qr: the caption is there', !!panel && find(panel, n => n.textContent === 'Scan with a phone camera on the same Wi-Fi. The phone then shows up under Waiting for approval.').length === 1);
+  det = dets(tree)[0];
+  check('qr: a redraw with SU.qr true renders the disclosure open', det.attrs.open !== undefined);
+  c.SU.qr = false;
+  tree = c.addressBox({address: url, address_error: null});
+  check('qr: a redraw with SU.qr false renders it closed', dets(tree)[0].attrs.open === undefined);
+  const img2 = find(dets(tree)[0], n => n.tagName === 'img')[0];
+  img2.listeners.error();
+  check('qr: when the image does not load, a hint replaces it (no broken picture)', !!img2.replacedBy && img2.replacedBy.className === 'su-hint'
+    && img2.replacedBy.textContent === 'The QR code did not load. Type the address on your phone instead.');
   tree = c.addressBox({address: null, address_error: 'Kinora is not listening on your network.'});
-  check('qr: when the address is gone the panel and the toggle are gone and the state is reset', c.SU.qr === false && !toggleOf(tree) && find(tree, n => n.attrs.id === 'su-qr-panel').length === 0);
+  check('qr: no address, no card, no disclosure, and the state is reset', c.SU.qr === false && find(tree, n => n.className === 'su-card-s').length === 0
+    && dets(tree).length === 0 && find(tree, n => n.className === 'su-foot-note' && n.textContent === 'Kinora is not listening on your network.').length === 1);
 }
 
 // ---- Theme: the page's own choice is used; with app.js missing, Settings still renders (Auto) and can save ----
