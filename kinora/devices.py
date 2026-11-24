@@ -2,11 +2,17 @@
 sharing switch, and the devices that were refused and are waiting for the owner to allow them (memory only).
 
 File: {"version": 1, "sharing": false, "devices": [{"ip": "192.168.1.20", "name": "Anna's laptop"}]}.
-A missing or corrupt file means the defaults (sharing off, no devices); it never stops the server.
-Addresses from --allow / KINORA_ALLOW (config.ALLOW) are allowed too, but they are not stored here."""
+A missing or corrupt file means the defaults (sharing off, no devices); it never stops the server. A corrupt file is
+copied to devices.json.bak before the first save overwrites it.
+The allowlist is by IP address: a device that takes over an allowed address gets that device's access.
+Addresses from --allow / KINORA_ALLOW (config.ALLOW) are allowed too, but they are not stored here.
+is_allowed reads an in-memory copy; the file is read again only when its size, mtime or inode changes.
+"""
+import copy
 import ipaddress
 import json
 import os
+import shutil
 import threading
 import time
 
@@ -22,6 +28,7 @@ BAD_IP = "Enter the device's IP address, like 192.168.1.20"
 _lock = threading.Lock()      # one read-modify-write of devices.json at a time
 _plock = threading.Lock()     # the waiting list
 _pending = {}                 # normalised ip -> last_seen (epoch seconds)
+_cache = {"key": None, "data": None}   # (path, file signature) -> the parsed file
 
 
 def _path():
@@ -85,14 +92,14 @@ def _normal(ip):
     return str(getattr(addr, "ipv4_mapped", None) or addr)
 
 
-def load():
-    """The stored settings. Never raises: a missing or unreadable file gives the defaults; bad entries are skipped."""
+def _parse(text):
+    """The settings of a file's text. Never raises: bad entries are skipped; not an object -> defaults (None if unreadable)."""
     try:
-        raw = json.loads(_path().read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return _defaults()
+        raw = json.loads(text)
+    except ValueError:
+        return None
     if not isinstance(raw, dict):
-        return _defaults()
+        return None
     out = _defaults()
     out["sharing"] = raw.get("sharing") is True
     seen = set()
@@ -110,22 +117,68 @@ def load():
     return out
 
 
+def _signature(path):
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_size, st.st_ino)
+
+
+def _current():
+    """The parsed file, from memory unless the file changed on disk since it was read."""
+    path = _path()
+    key = (str(path), _signature(path))
+    if _cache["data"] is None or _cache["key"] != key:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            text = None
+        parsed = _parse(text) if text is not None else None
+        _cache["data"] = parsed if parsed is not None else _defaults()
+        _cache["key"] = key
+    return _cache["data"]
+
+
+def load():
+    """A copy of the stored settings. Never raises: a missing or unreadable file gives the defaults."""
+    return copy.deepcopy(_current())
+
+
 def save(data):
     path = _path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        try:
+            corrupt = _parse(path.read_text(encoding="utf-8")) is None
+        except OSError:
+            corrupt = True
+        if corrupt:
+            shutil.copyfile(path, path.with_name(path.name + ".bak"))   # keep the unreadable file before overwriting it
     body = {"version": 1, "sharing": bool(data.get("sharing")), "devices": list(data.get("devices", []))}
     _write_atomic(path, json.dumps(body, indent=2, ensure_ascii=False).encode() + b"\n")
+    _cache["data"] = None   # the next read comes from the new file
+
+
+def from_command_line():
+    """Sharing was set when Kinora started (--allow / KINORA_ALLOW, or a --host / KINORA_HOST other than loopback)."""
+    return bool(config.ALLOW) or config.HOST != "127.0.0.1"
+
+
+def sharing_on():
+    """Other computers may connect: the stored switch, or the command line."""
+    return from_command_line() or _current()["sharing"]
 
 
 def is_allowed(ip):
-    """True for a loopback-free peer address that is in config.ALLOW or is a stored device."""
+    """True for a peer address that is in config.ALLOW or is a stored device."""
     addr = _normal(ip)
     if addr is None:
         return False
     parsed = ipaddress.ip_address(addr)
     if any(parsed in net for net in config.ALLOW):
         return True
-    return addr in {d["ip"] for d in load()["devices"]}
+    return addr in {d["ip"] for d in _current()["devices"]}
 
 
 def add(ip, name=""):

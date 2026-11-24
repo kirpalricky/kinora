@@ -1506,6 +1506,7 @@ function pendingBox(d) {
       h('div', {class: 'su-cred-a'},
         btn('Allow', () => allowDevice(p.ip), 'go sm', {'data-focus': 'allow:' + p.ip}),
         btn('Dismiss', () => dismissDevice(p.ip), 'ghost sm', {'data-focus': 'dismiss:' + p.ip}))))),
+    h('p', {class: 'su-foot-note', text: 'Only allow a device you recognise: anyone on your network can ask.'}),
     errAt('pending'));
 }
 async function allowDevice(ip) {

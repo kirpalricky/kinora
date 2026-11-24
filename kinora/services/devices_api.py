@@ -16,8 +16,9 @@ from kinora.errors import Conflict
 from kinora.services.setup import _body
 
 ANY_ADDRESSES = ("0.0.0.0", "::")
+CHANGED_TEXT = "This computer's network address changed. Turn sharing off and on again."
 # Listening state, set by server.py before the runner starts (aiohttp rejects new app keys once started):
-# {"runner": AppRunner, "lan_site": TCPSite or None (the network socket; None when not sharing)}
+# {"runner": AppRunner, "lan_site": TCPSite or None (the network socket), "lan_ip": the address it is bound to}
 LISTEN = web.AppKey("listen", dict)
 _listen_lock = asyncio.Lock()   # one start or stop of the network socket at a time
 
@@ -35,25 +36,30 @@ def lan_address():
     return ip, None
 
 
-def from_command_line():
-    return bool(config.ALLOW) or config.HOST != "127.0.0.1"
+def _network_now():
+    """The address the network socket should use now: the command-line address, else this computer's address."""
+    if devices.from_command_line() and config.HOST not in ANY_ADDRESSES:
+        return config.HOST, None
+    return lan_address()
 
 
 def view(app):
+    state = app[LISTEN]
     data = devices.load()
-    cmd = from_command_line()
-    listening = app[LISTEN]["lan_site"] is not None
+    cmd = devices.from_command_line()
+    listening = state["lan_site"] is not None
     sharing = data["sharing"] or cmd
     address = address_error = None
-    if sharing:
-        if cmd and config.HOST not in ANY_ADDRESSES:
-            ip, address_error = config.HOST, None
+    if sharing and listening:
+        bound = state["lan_ip"]
+        now, _ = _network_now()
+        if now == bound:
+            address = f"http://{bound}:{config.PORT}"
         else:
-            ip, address_error = lan_address()
-        if ip and listening:
-            address = f"http://{ip}:{config.PORT}"
-        elif ip and address_error is None:
-            address_error = "Kinora is not listening on your network. Turn sharing off and on again."
+            address_error = CHANGED_TEXT
+    elif sharing:
+        now, err = _network_now()
+        address_error = err if now is None else "Kinora is not listening on your network. Turn sharing off and on again."
     return {
         "sharing": sharing,
         "listening": listening,
@@ -66,24 +72,53 @@ def view(app):
     }
 
 
+async def _start_lan(app, ip):
+    """Start the network socket on this address. Raises OSError when it cannot listen there."""
+    state = app[LISTEN]
+    site = web.TCPSite(state["runner"], ip, config.PORT)
+    await site.start()
+    state["lan_site"] = site
+    state["lan_ip"] = ip
+
+
+async def _stop_lan(app):
+    """Stop the network socket and close the connections that arrived on it (keep-alive ones included)."""
+    state = app[LISTEN]
+    site, ip, runner = state["lan_site"], state["lan_ip"], state["runner"]
+    if site is None:
+        return
+    await site.stop()
+    state["lan_site"] = None
+    state["lan_ip"] = None
+    server = getattr(runner, "server", None)
+    for handler in list(getattr(server, "connections", [])):
+        transport = getattr(handler, "transport", None)
+        sock = transport.get_extra_info("sockname") if transport is not None else None
+        if sock and sock[0] == ip:
+            transport.close()
+
+
 async def listen(app):
     """Start the sockets when the server starts (called by server.main). Loopback always; the network socket when
-    sharing is on. A bind failure on loopback (port in use) is raised for main() to explain."""
+    sharing is on. A bind failure is raised for main() to explain."""
     state = app[LISTEN]
     runner = state["runner"]
-    if from_command_line():
-        site = web.TCPSite(runner, config.HOST, config.PORT)
+    devices.load()   # the stored settings are read once here; requests use the copy in memory
+    if devices.from_command_line():
+        host = config.HOST
+        if host not in ("127.0.0.1", "0.0.0.0"):   # a specific or IPv6 address: loopback is kept as well
+            await web.TCPSite(runner, "127.0.0.1", config.PORT).start()
+        site = web.TCPSite(runner, host, config.PORT)
         await site.start()
         state["lan_site"] = site
+        state["lan_ip"] = host if host not in ANY_ADDRESSES else lan_address()[0]
         return
     await web.TCPSite(runner, "127.0.0.1", config.PORT).start()
     if devices.load()["sharing"]:
         ip, _ = lan_address()
         if ip:
             try:
-                site = web.TCPSite(runner, ip, config.PORT)
-                await site.start()
-                state["lan_site"] = site
+                await _start_lan(app, ip)
             except OSError:
                 pass   # the view says Kinora is not listening on the network; loopback keeps working
 
@@ -122,23 +157,21 @@ async def dismiss_device(request):
 async def set_sharing(request):
     enabled = await _body_bool(request)
     app = request.app
-    if from_command_line():
+    if devices.from_command_line():
         raise Conflict("Sharing is set when Kinora is started, so it cannot change here")
     async with _listen_lock:
         state = app[LISTEN]
-        runner = state["runner"]
-        if enabled and runner is not None and state["lan_site"] is None:
-            ip, err = lan_address()
-            if not ip:
-                raise Conflict(err)
-            try:
-                site = web.TCPSite(runner, ip, config.PORT)
-                await site.start()
-            except OSError:
-                raise Conflict(f"Kinora could not start listening on your network. Check that no other program uses port {config.PORT}.") from None
-            state["lan_site"] = site
-        if not enabled and state["lan_site"] is not None:
-            await state["lan_site"].stop()
-            state["lan_site"] = None
-        devices.set_sharing(enabled)
+        if enabled:
+            if state["runner"] is not None and state["lan_site"] is None:
+                ip, err = lan_address()
+                if not ip:
+                    raise Conflict(err)
+                try:
+                    await _start_lan(app, ip)
+                except OSError:
+                    raise Conflict(f"Kinora could not start listening on your network. Check that no other program uses port {config.PORT}.") from None
+            devices.set_sharing(True)
+        else:
+            devices.set_sharing(False)   # first the switch: a request arriving now is refused
+            await _stop_lan(app)
     return web.json_response(view(app))

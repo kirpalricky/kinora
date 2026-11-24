@@ -599,6 +599,25 @@ async def prune(app):
 ALLOWED_HOSTS = config.allowed_hosts(config.PORT)
 ALLOWED_ORIGINS = {f"http://{h}" for h in ALLOWED_HOSTS}
 STATE_CHANGING = ("POST", "PUT", "PATCH", "DELETE")
+# Routes another computer may call while sharing is on (method, route canonical). Everything else answers 403 to a
+# remote peer, including unmatched paths and HEAD. LOCAL_ONLY_ROUTES lists the rest; tests/test_allow.py checks that every
+# route of make_app is in one of the two sets.
+REMOTE_ROUTES = {
+    ("GET", "/"), ("GET", "/static/{name}"), ("GET", "/api/cameras"), ("GET", "/api/status"),
+    ("GET", "/api/recordings"), ("GET", "/api/events"), ("GET", "/api/thumb"), ("GET", "/api/clip"),
+    ("GET", "/live/{cam}/{file}"), ("POST", "/api/play/start"), ("POST", "/api/play/stop"),
+    ("GET", "/api/play/status"), ("GET", "/play/{cam}/{sid}/{file}"), ("POST", "/api/live/stop"),
+    ("POST", "/api/export"), ("GET", "/api/export/{id}"), ("POST", "/api/export/{id}/cancel"),
+    ("GET", "/exports/{name}"), ("POST", "/api/ptz"),
+}
+LOCAL_ONLY_ROUTES = {
+    ("GET", "/api/setup/state"), ("POST", "/api/setup/account"), ("POST", "/api/setup/cameras"),
+    ("POST", "/api/setup/reach"), ("GET", "/api/setup/discover"), ("POST", "/api/setup/discover"),
+    ("POST", "/api/setup/verify"), ("PUT", "/api/cameras/order"), ("PATCH", "/api/cameras/{cam_id}"),
+    ("POST", "/api/cameras/{cam_id}/credentials"), ("DELETE", "/api/cameras/{cam_id}"),
+    ("GET", "/api/setup/devices"), ("POST", "/api/setup/devices"), ("DELETE", "/api/setup/devices/{ip}"),
+    ("POST", "/api/setup/devices/dismiss"), ("PUT", "/api/setup/sharing"),
+}
 NO_BODY_ROUTES = {"/api/export/{id}/cancel"}   # body-less POST from the page: the Origin check still applies
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
        "img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; "
@@ -613,52 +632,85 @@ def _peer_ip(request):
     return getattr(ip, "ipv4_mapped", None) or ip
 
 
+def _socket_ip(request):
+    """The address this connection arrived on: this computer's own address when its owner opens the shown address."""
+    transport = request.transport
+    sock = transport.get_extra_info("sockname") if transport is not None else None
+    try:
+        ip = ipaddress.ip_address(sock[0]) if sock else None
+    except (ValueError, TypeError, IndexError):
+        return None
+    return getattr(ip, "ipv4_mapped", None) or ip
+
+
 def _is_admin_route(request):
     """Setup and camera settings: only the computer the server runs on may change them (or read the setup state)."""
     p = request.path
     return p.startswith("/api/setup/") or (p.startswith("/api/cameras/") and request.method != "GET")
 
 
+MACHINE_NAMES = {n.lower() for n in (socket.gethostname(), socket.gethostname().split(".")[0] + ".local", socket.getfqdn())}
+
+
+def _lan_host(host):
+    """A Host header that names this computer by an IP address or machine name on our port: a person opening the address."""
+    name, _, port = (host or "").rpartition(":")
+    if port != str(config.PORT):
+        return False
+    try:
+        ipaddress.ip_address(name.strip("[]"))
+        return True
+    except ValueError:
+        return name.lower() in MACHINE_NAMES
+
+
 def _host_ok(host, remote):
-    """Loopback clients: localhost / 127.0.0.1 on our port. Allowed devices: also this machine's IP address(es) or
-    machine name on our port; any other name is refused, so a rebound DNS name cannot reach the server."""
+    """Loopback clients: localhost / 127.0.0.1 on our port. Other computers: this machine's IP address or name on our
+    port (_lan_host); any other name is refused, so a rebound DNS name cannot reach the server."""
     if host in ALLOWED_HOSTS:
         return True
-    if remote:
-        name, _, port = (host or "").rpartition(":")
-        if port != str(config.PORT):
-            return False
-        try:
-            ipaddress.ip_address(name.strip("[]"))
-            return True
-        except ValueError:
-            return name.lower() in MACHINE_NAMES
-    return False
+    return bool(remote and _lan_host(host))
 
 
-MACHINE_NAMES = {n.lower() for n in (socket.gethostname(), socket.gethostname().split(".")[0] + ".local", socket.getfqdn())}
+def _route_key(request):
+    resource = getattr(request.match_info.route, "resource", None)
+    return (request.method, getattr(resource, "canonical", None))
+
+
+def _forbid(text):
+    resp = web.Response(status=403, text=text)
+    resp.force_close()   # a refused connection is not kept alive
+    return resp
 
 
 @web.middleware
 async def local_only(request, handler):
-    """Block DNS-rebinding / cross-site reads of the (private) camera video, and devices that are not allowed."""
+    """Block DNS-rebinding / cross-site reads of the (private) camera video, and devices that are not allowed.
+    Another computer (a peer that is not this computer) may only call REMOTE_ROUTES, and only while sharing is on."""
     ip = _peer_ip(request)
-    remote = not (ip and ip.is_loopback)
-    if remote:
+    loopback = bool(ip and ip.is_loopback)
+    local = loopback or bool(ip and ip == _socket_ip(request))   # this computer, opened by its own address
+    if not local:
+        if not devices.sharing_on():
+            return _forbid("Kinora: sharing is off, so other computers cannot connect. Turn it on in Settings > Other devices.")
         if not devices.is_allowed(ip):
-            if ip:
+            if ip and _lan_host(request.headers.get("Host")):
                 devices.note_denied(str(ip))   # waits in Settings > Other devices until the owner allows it
-            raise web.HTTPForbidden(text=f"Kinora: this device ({request.remote or 'unknown'}) is not allowed yet. Ask the owner to allow it in Settings > Other devices.")
+            return _forbid(f"Kinora: this device ({request.remote or 'unknown'}) is not allowed yet. Ask the owner to allow it in Settings > Other devices.")
         if _is_admin_route(request):
-            raise web.HTTPForbidden(text="settings can only be changed on the computer running Kinora")
+            return _forbid("settings can only be changed on the computer running Kinora")
+        if _route_key(request) not in REMOTE_ROUTES:
+            return _forbid("only the computer running Kinora can use this")
     host = request.headers.get("Host")
-    if not _host_ok(host, remote):
+    if not _host_ok(host, remote=not loopback):
         raise web.HTTPForbidden(text="bad Host header")
     if request.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none"):
         raise web.HTTPForbidden(text="cross-site request refused")
     if request.method in STATE_CHANGING:
-        # browsers always send Origin on fetch POST; a missing or foreign one is refused (no fallback to Sec-Fetch-Site)
-        if request.headers.get("Origin") not in ALLOWED_ORIGINS | {f"http://{host}"}:
+        # browsers always send Origin on fetch POST; a missing or foreign one is refused (no fallback to Sec-Fetch-Site).
+        # Another computer: only its own address as Origin.
+        allowed = (ALLOWED_ORIGINS | {f"http://{host}"}) if loopback else {f"http://{host}"}
+        if request.headers.get("Origin") not in allowed:
             raise web.HTTPForbidden(text="missing or foreign Origin refused")
         route = getattr(request.match_info.route, "resource", None)
         if request.content_type != "application/json" and getattr(route, "canonical", None) not in NO_BODY_ROUTES:
@@ -774,10 +826,12 @@ def main(on_started=None):
         on_started()
     try:
         asyncio.run(_serve(app))
+    except KeyboardInterrupt:
+        pass   # Ctrl+C where signal handlers are not available (Windows): the cleanup has run
     except OSError as e:
-        if e.errno != errno.EADDRINUSE:
-            raise
-        sys.exit(f"Port {config.PORT} is already in use. Stop the other program, or set KINORA_PORT to another port.")
+        if e.errno == errno.EADDRINUSE:
+            sys.exit(f"Port {config.PORT} is already in use. Stop the other program, or set KINORA_PORT to another port.")
+        sys.exit(f"Kinora could not listen on {config.HOST}:{config.PORT} ({e.strerror or e}). Check KINORA_HOST or --host.")
 
 
 if __name__ == "__main__":
