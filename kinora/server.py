@@ -650,7 +650,9 @@ def _is_admin_route(request):
     return p.startswith("/api/setup/") or (p.startswith("/api/cameras/") and request.method != "GET")
 
 
-MACHINE_NAMES = {n.lower() for n in (socket.gethostname(), socket.gethostname().split(".")[0] + ".local", socket.getfqdn())}
+# no socket.getfqdn(): it can block on a DNS lookup at import time (seen on macOS CI: the server took over 30 s to start)
+_HOST = socket.gethostname()
+MACHINE_NAMES = {n.lower() for n in (_HOST, _HOST.split(".")[0] + ".local")}
 
 
 def _lan_host(host):
