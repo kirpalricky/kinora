@@ -21,7 +21,8 @@ export KINORA_NO_INSTANCE_LOCK=1
 $PY -m unittest tests.test_gate tests.test_listings_export tests.test_slots tests.test_slots_register tests.test_session_lock tests.test_errors tests.test_live_argv tests.test_config_home \
   tests.test_gate_hardening tests.test_instance tests.test_live_gate \
   tests.test_creds tests.test_creds_percam tests.test_gate_recent_fails tests.test_binaries tests.test_health_ping tests.test_hls_orphans tests.test_live_sweep \
-  tests.test_p2p_punch tests.test_pytapo_guard tests.test_registry tests.test_setup_api tests.test_discover tests.test_thumb tests.test_native_thumb tests.test_cli
+  tests.test_p2p_punch tests.test_pytapo_guard tests.test_registry tests.test_setup_api tests.test_discover tests.test_thumb tests.test_native_thumb tests.test_cli \
+  tests.test_allow tests.test_devices
 $PY tests/test_udt.py
 $PY tests/test_p2p_setup.py
 command -v ffmpeg >/dev/null && $PY tests/test_play.py   # builds a synthetic clip with real ffmpeg

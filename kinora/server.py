@@ -24,6 +24,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import socket
 import sys
 import time
@@ -33,7 +34,7 @@ from pathlib import Path
 from aiohttp import web
 from pytapo.media_stream.downloader import Downloader
 
-from kinora import config, creds, health, instance
+from kinora import config, creds, devices, health, instance
 from kinora.binaries import BinaryMissing, ffmpeg_path, prepend_ffmpeg_dir_to_path, require_pytapo_tools
 from kinora import p2p_media
 from kinora.errors import CameraError
@@ -43,6 +44,7 @@ from kinora.camera import slots as slots_mod
 from kinora.camera.slots import slots
 from kinora.services import export, hls, listings, ptz as ptz_service
 from kinora.services import discover as discover_api
+from kinora.services import devices_api
 from kinora.services import setup as setup_api
 from kinora.camera import gate, patch, session
 from kinora.camera.gate import MARK, st, _reload
@@ -643,8 +645,10 @@ async def local_only(request, handler):
     ip = _peer_ip(request)
     remote = not (ip and ip.is_loopback)
     if remote:
-        if not (ip and any(ip in net for net in config.ALLOW)):
-            raise web.HTTPForbidden(text="this device is not allowed: add its address with --allow on the server")
+        if not devices.is_allowed(ip):
+            if ip:
+                devices.note_denied(str(ip))   # waits in Settings > Other devices until the owner allows it
+            raise web.HTTPForbidden(text=f"Kinora: this device ({request.remote or 'unknown'}) is not allowed yet. Ask the owner to allow it in Settings > Other devices.")
         if _is_admin_route(request):
             raise web.HTTPForbidden(text="settings can only be changed on the computer running Kinora")
     host = request.headers.get("Host")
@@ -692,6 +696,7 @@ def make_app(background=True):
     """The aiohttp application. background=False leaves out the cleanup context (cache prune, health loop, reapers):
     tests use it so that no task starts and nothing is probed."""
     app = web.Application(middlewares=[local_only, camera_errors])
+    app[devices_api.LISTEN] = {"runner": None, "lan_site": None}   # filled by _serve (kinora/services/devices_api.py)
     if background:
         app.cleanup_ctx.append(prune)
     app.add_routes([
@@ -726,11 +731,39 @@ def make_app(background=True):
         web.patch("/api/cameras/{cam_id}", setup_api.patch_camera),
         web.post("/api/cameras/{cam_id}/credentials", setup_api.camera_credentials),
         web.delete("/api/cameras/{cam_id}", setup_api.delete_camera),
+        # other devices (kinora/services/devices_api.py): the allowed list, waiting devices, the sharing switch
+        web.get("/api/setup/devices", devices_api.get_devices),
+        web.post("/api/setup/devices", devices_api.add_device),
+        web.delete("/api/setup/devices/{ip}", devices_api.remove_device),
+        web.post("/api/setup/devices/dismiss", devices_api.dismiss_device),
+        web.put("/api/setup/sharing", devices_api.set_sharing),
     ])
     return app
 
 
 app = make_app()
+
+async def _serve(app):
+    """Listen until SIGINT / SIGTERM, then stop the sockets and run the cleanup contexts (as web.run_app does)."""
+    runner = web.AppRunner(app)
+    app[devices_api.LISTEN]["runner"] = runner
+    await runner.setup()
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, stop.set)
+        except (NotImplementedError, RuntimeError):
+            pass
+    try:
+        await devices_api.listen(app)
+        address = devices_api.view(app)["address"]
+        if address:
+            print(f"Other devices on your network can open {address}", flush=True)
+        await stop.wait()
+    finally:
+        await runner.cleanup()
+
 
 def main(on_started=None):
     """Start the server (blocking). Used by `python server.py` and by kinora.cli.
@@ -740,7 +773,7 @@ def main(on_started=None):
     if on_started:
         on_started()
     try:
-        web.run_app(app, host=config.HOST, port=config.PORT)
+        asyncio.run(_serve(app))
     except OSError as e:
         if e.errno != errno.EADDRINUSE:
             raise

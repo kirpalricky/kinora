@@ -284,16 +284,40 @@ function prereqRows(p) {
       fix: "Saved passwords can't be read on this computer.", link: {text: 'How to fix', href: SU_HELP_URL}},
   ];
 }
+// Other devices (Settings > Other devices). state: the body of GET /api/setup/devices.
+const DEV_IP_MSG = "Enter the device's IP address, like 192.168.1.20";
+function devicesSubtitle(state) {
+  if (!state) return '';
+  return state.sharing ? 'On, ' + (state.devices || []).length + ' allowed' : 'Off';
+}
+function validateDeviceIp(s) { return validateIp(s) ? DEV_IP_MSG : ''; }
+function validateDeviceName(s) { return String(s || '').trim().length > 60 ? 'The name can be at most 60 characters.' : ''; }
+// "3 min ago" for a time in seconds before now.
+function agoText(sec) {
+  const s = Math.max(0, Math.floor(Number(sec) || 0));
+  if (s < 60) return 'a moment ago';
+  if (s < 3600) return Math.floor(s / 60) + ' min ago';
+  if (s < 86400) { const hr = Math.floor(s / 3600); return hr + (hr === 1 ? ' hour ago' : ' hours ago'); }
+  const d = Math.floor(s / 86400); return d + (d === 1 ? ' day ago' : ' days ago');
+}
+// What is on screen: a redraw is needed only when this changes (a waiting device's last-seen time is painted apart).
+function devicesKey(state) {
+  if (!state) return '';
+  return JSON.stringify([state.sharing, state.listening, state.address, state.address_error, state.from_command_line,
+    state.devices, (state.pending || []).map(p => p.ip), state.command_line]);
+}
+function deviceLabel(d) { return d.name || d.ip; }
 /* setup-logic:end */
 
 // ---------- DOM: wizard and Settings. Text goes in with textContent only; no innerHTML with data. ----------
 // SU.view: a wizard step (prepare, account, add, verify) or settings. SU.sel: the Settings pane: a camera id, 'new',
 // 'account', 'computer', 'about' or ''. SU.edit: the one row in edit mode ('name:id', 'addr:id', 'live:id', 'acct').
+// SU.dev: the last GET /api/setup/devices answer (Other devices); SU.devForm: its Add a device draft, kept across redraws.
 // SU.opener: the data-focus key of the control that opened the edit. SU.errs: messages by key. SU.saved: the key
 // that shows "Saved" once. SU.vs: this page's last Verify result per camera. SU.deadline and SU.span: sign-in waits.
 const SU = {state: null, playable: false, view: 'prepare', changed: false, busy: '', vs: {}, deadline: {}, span: {},
   authStop: '', add: null, uid: 0, sel: '', prevSel: '', newRow: null, edit: '', opener: '', errs: {}, saved: '',
-  screen: 'list', loadErr: ''};
+  screen: 'list', loadErr: '', dev: null, devForm: {ip: '', name: ''}, devDirty: false, devErr: ''};
 const byId = id => document.getElementById(id);
 const SVG_NS = 'http://www.w3.org/2000/svg';
 // Icons: 20px on a 24 grid, stroke currentColor, no fill. Built with createElementNS (h() cannot make SVG).
@@ -436,7 +460,7 @@ let suToastT = 0;
 function toast(text, undo) {
   const box = byId('sutoast');
   clearTimeout(suToastT);
-  box.replaceChildren(h('span', {text}), undo ? btn('Undo', () => { box.replaceChildren(); clearTimeout(suToastT); undo(); }, 'ghost sm') : null);
+  box.replaceChildren(h('span', {text}), ...(undo ? [btn('Undo', () => { box.replaceChildren(); clearTimeout(suToastT); undo(); }, 'ghost sm')] : []));
   const hide = () => { box.replaceChildren(); };
   suToastT = setTimeout(hide, undo ? 6000 : 4000);
   box.onmouseenter = () => clearTimeout(suToastT);
@@ -486,7 +510,7 @@ function renderTop() {
 // The title of the Settings pane (on a phone's detail screen the header shows it): the camera's name or the item's name.
 function paneTitle() {
   const c = SU.state && SU.state.cameras.find(x => x.id === SU.sel);
-  return c ? c.name : ({new: 'New camera', account: 'TP-Link account', computer: 'This computer', about: 'About this app'}[SU.sel] || 'Settings');
+  return c ? c.name : ({new: 'New camera', account: 'TP-Link account', computer: 'This computer', devices: 'Other devices', about: 'About this app'}[SU.sel] || 'Settings');
 }
 // A help link for a prerequisite row (external, opens in a new tab); null when the row has none.
 function fixLink(r) {
@@ -526,6 +550,7 @@ function openSetup(view, sel) {
     SU.screen = sel && narrow() ? 'detail' : 'list';
   }
   go(view);
+  if (view === 'settings') loadDevices();
 }
 function closeSetup() {
   if (SU.changed) { location.reload(); return; }   // the timeline reads cameras.json at start: reload to show the new list
@@ -922,7 +947,7 @@ function waitBar(c) {
 }
 function viewSettings() {
   const cams = SU.state.cameras;
-  if (!['account', 'computer', 'about', 'new'].includes(SU.sel) && !cams.some(c => c.id === SU.sel)) SU.sel = pickSelection(cams);
+  if (!['account', 'computer', 'devices', 'about', 'new'].includes(SU.sel) && !cams.some(c => c.id === SU.sel)) SU.sel = pickSelection(cams);
   return h('div', {class: 'su-set', 'data-screen': SU.screen}, sideNav(cams),
     h('div', {class: 'su-pane', id: 'supane'}, h('div', {class: 'su-pane-in'}, paneFor(cams))));
 }
@@ -947,7 +972,8 @@ function sideNav(cams) {
   const group = (id, label, rows) => h('section', {class: 'su-grp', 'aria-labelledby': id}, h('div', {class: 'su-grp-h', id, text: label}), rows);
   return h('nav', {class: 'su-side', 'aria-label': 'Settings', onkeydown: sideKeys},
     group('su-g-cam', 'Cameras', [camRows, addRow]),
-    group('su-g-gen', 'General', [row('account', 'TP-Link account', {}), row('computer', 'This computer', {}), row('about', 'About', {})]));
+    group('su-g-gen', 'General', [row('account', 'TP-Link account', {}), row('computer', 'This computer', {}),
+      row('devices', 'Other devices', {sub: devicesSubtitle(SU.dev)}), row('about', 'About', {})]));
 }
 function selectPane(sel) {
   const prior = SU.sel;
@@ -960,11 +986,13 @@ function selectPane(sel) {
     if (wasList) history.pushState({su: 'detail'}, '');
     renderView('[data-focus="pane-title"]');
   } else renderView(`[data-focus="side:${sel}"]`);
+  if (sel === 'devices') loadDevices();
 }
 function paneFor(cams) {
   if (SU.sel === 'new') return paneNew();
   if (SU.sel === 'account') return paneAccountPane();
   if (SU.sel === 'computer') return paneComputer();
+  if (SU.sel === 'devices') return paneDevices();
   if (SU.sel === 'about') return paneAbout();
   const c = cams.find(x => x.id === SU.sel);
   return c ? paneCamera(c) : paneEmpty();
@@ -1361,6 +1389,203 @@ function paneAbout() {
       version ? h('div', {class: 'su-card-s'}, cred('Version', version)) : null,
       h('p', {class: 'su-foot-note', text: SU_LEGAL})))];
 }
+// ---------- Other devices: who may use this server from another computer (kinora/services/devices_api.py) ----------
+// Errors are kept under their row: SU.errs.sharing, .address, .pending, .list, .add. Every action answers with the
+// whole list (applyDevices), so the page always shows what the server stored. A waiting device's last-seen time is
+// painted in place (paintSeen); the list is re-read every 5 s while this pane is open (devicesTick).
+function devicesVisible() {
+  return !byId('setup').hidden && SU.view === 'settings' && SU.sel === 'devices' && (!narrow() || SU.screen === 'detail');
+}
+function typingNow() {
+  const a = document.activeElement;
+  return !!a && byId('setup').contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
+}
+function applyDevices(data) {
+  if (!data || !Array.isArray(data.devices) || !Array.isArray(data.pending)) return false;
+  SU.dev = data;
+  return true;
+}
+async function loadDevices() {
+  const before = devicesKey(SU.dev);
+  const r = await api('GET', '/api/setup/devices');
+  if (r.ok && applyDevices(r.data)) {
+    SU.devErr = '';
+    if (devicesKey(SU.dev) !== before) SU.devDirty = true;
+  } else {
+    const msg = r.ok ? 'The list did not load. Try again.' : r.text;
+    if (msg !== SU.devErr || !SU.dev) { SU.devErr = msg; SU.devDirty = true; }
+  }
+  redrawDevices();
+  paintSeen();
+}
+// Redraws the pane when the list changed, unless a text field has focus (the change waits for the next tick).
+function redrawDevices() {
+  if (!SU.devDirty || !devicesVisible() || typingNow()) return;
+  SU.devDirty = false;
+  renderView();
+}
+async function devicesTick() {
+  if (devicesVisible()) await loadDevices();
+}
+function paintSeen() {
+  const now = Date.now() / 1000;
+  document.querySelectorAll('#setup [data-seen-ip]').forEach(n => {
+    const p = (SU.dev && SU.dev.pending || []).find(x => x.ip === n.dataset.seenIp);
+    if (p) n.textContent = 'tried to connect ' + agoText(now - p.last_seen);
+  });
+}
+function paneDevices() {
+  const head = [h('div', {class: 'su-ident'}, h('h2', {class: 'su-id-name', text: 'Other devices', 'data-focus': 'pane-title', tabindex: '-1'})),
+    h('p', {class: 'su-lead', text: 'Use this Kinora from other computers on your home network. They can watch recordings, go live and export, but cannot change settings or passwords.'})];
+  const d = SU.dev;
+  if (!d) return [...head, alertBox('bad', 'alert', null, h('p', {text: SU.devErr || 'The list did not load. Try again.'}),
+    {role: 'alert'}), h('div', {class: 'su-bar'}, btn('Try again', loadDevices, 'go', {'data-focus': 'dev-retry'}))];
+  const parts = [...head, section('Sharing', sharingBox(d))];
+  if (d.sharing && (d.address || d.address_error)) parts.push(section('Address', addressBox(d)));
+  if (d.pending.length) parts.push(section('Waiting for approval', pendingBox(d)));
+  parts.push(section('Allowed devices', allowedBox(d)));
+  parts.push(section('Add a device', addDeviceForm()));
+  parts.push(h('p', {class: 'su-foot-note', text: 'There is no password on this connection: only turn it on for a network you trust.'}));
+  return parts;
+}
+function sharingBox(d) {
+  if (d.from_command_line) return h('div', {class: 'su-stack'}, h('div', {class: 'su-card-s'}, cred('Let other computers connect', 'On (set when Kinora was started)')));
+  return h('div', {class: 'su-stack'}, h('div', {class: 'su-card-s'}, cred('Let other computers connect', sharingGroup(!!d.sharing))), errAt('sharing'));
+}
+// Off / On: a radio group like the theme choice (aria-checked on the chosen one, one tab stop, arrow keys apply).
+function sharingGroup(on) {
+  const group = h('div', {class: 'su-seg-group', role: 'radiogroup', 'aria-label': 'Let other computers connect', onkeydown: sharingKeys});
+  for (const [key, label, value] of [['off', 'Off', false], ['on', 'On', true]]) {
+    const chosen = on === value;
+    group.append(h('button', {type: 'button', class: 'su-seg-btn', role: 'radio', 'aria-checked': chosen ? 'true' : 'false',
+      tabindex: chosen ? '0' : '-1', 'data-focus': 'share:' + key, onclick: () => setSharing(value), text: label}));
+  }
+  return group;
+}
+function sharingKeys(e) {
+  if (!/^Arrow(Left|Right|Up|Down)$/.test(e.key)) return;
+  const btns = [...e.currentTarget.querySelectorAll('[role="radio"]')], i = btns.indexOf(e.target);
+  if (i < 0) return;
+  e.preventDefault();
+  setSharing(btns[(i + 1) % btns.length].dataset.focus === 'share:on');
+}
+async function setSharing(on) {
+  if (!SU.dev || !!SU.dev.sharing === on) return;
+  delete SU.errs.sharing;
+  const r = await api('PUT', '/api/setup/sharing', {enabled: on});
+  if (!r.ok) SU.errs.sharing = r.text;
+  else {
+    applyDevices(r.data);
+    toast(on ? 'Other computers can now open Kinora.' : 'Other computers can no longer connect.');
+  }
+  renderView(`[data-focus="share:${on ? 'on' : 'off'}"]`);
+}
+function addressBox(d) {
+  const kids = [];
+  if (d.address) kids.push(h('div', {class: 'su-card-s'}, cred('Open this on the other computer',
+    h('span', {class: 'su-mono', text: d.address}), btn('Copy', () => copyAddress(d.address), 'ghost sm', {'data-focus': 'copy-address'}))));
+  if (d.address_error) kids.push(h('p', {class: 'su-foot-note', text: d.address_error}));
+  kids.push(errAt('address'));
+  return h('div', {class: 'su-stack'}, kids);
+}
+async function copyAddress(addr) {
+  delete SU.errs.address;
+  try {
+    await navigator.clipboard.writeText(addr);
+    toast('Copied');
+  } catch (e) {
+    SU.errs.address = 'Could not copy. Select the address and copy it.';
+    renderView('[data-focus="copy-address"]');
+  }
+}
+function pendingBox(d) {
+  return h('div', {class: 'su-stack'},
+    h('div', {class: 'su-card-s'}, d.pending.map(p => h('div', {class: 'su-cred'},
+      h('span', {class: 'su-cred-l su-mono', text: p.ip}),
+      h('div', {class: 'su-cred-v'}, h('span', {'data-seen-ip': p.ip, text: 'tried to connect ' + agoText(Date.now() / 1000 - p.last_seen)})),
+      h('div', {class: 'su-cred-a'},
+        btn('Allow', () => allowDevice(p.ip), 'go sm', {'data-focus': 'allow:' + p.ip}),
+        btn('Dismiss', () => dismissDevice(p.ip), 'ghost sm', {'data-focus': 'dismiss:' + p.ip}))))),
+    errAt('pending'));
+}
+async function allowDevice(ip) {
+  delete SU.errs.pending;
+  const r = await api('POST', '/api/setup/devices', {ip, name: ''});
+  if (!r.ok) { SU.errs.pending = r.text; renderView(`[data-focus="allow:${ip}"]`); return; }
+  applyDevices(r.data);
+  toast(`${ip} can now connect.`, () => undoAllow(ip));
+  renderView('[data-focus="pane-title"]');
+}
+async function undoAllow(ip) {
+  const r = await api('DELETE', '/api/setup/devices/' + encodeURIComponent(ip), {});
+  if (!r.ok) { SU.errs.list = r.text; renderView('[data-focus="pane-title"]'); return; }
+  applyDevices(r.data);
+  toast(`${ip} is no longer allowed.`);
+  renderView('[data-focus="pane-title"]');
+}
+async function dismissDevice(ip) {
+  delete SU.errs.pending;
+  const r = await api('POST', '/api/setup/devices/dismiss', {ip});
+  if (!r.ok) { SU.errs.pending = r.text; renderView(`[data-focus="dismiss:${ip}"]`); return; }
+  applyDevices(r.data);
+  toast(`${ip} dismissed.`);
+  renderView('[data-focus="pane-title"]');
+}
+function allowedBox(d) {
+  const kids = [];
+  if (d.devices.length) kids.push(h('div', {class: 'su-card-s'}, d.devices.map(x => cred(deviceLabel(x),
+    x.name ? h('span', {class: 'su-mono', text: x.ip}) : null,
+    btn('Remove', () => removeDevice(x), 'ghost sm', {'data-focus': 'remove:' + x.ip})))));
+  else kids.push(h('p', {class: 'su-hint', text: 'No devices yet. Turn sharing on, open the address on the other computer, then allow it here.'}));
+  if (d.command_line.length) kids.push(h('div', {class: 'su-card-s'}, d.command_line.map(n => cred(n, 'Set when Kinora was started'))));
+  kids.push(errAt('list'));
+  return h('div', {class: 'su-stack'}, kids);
+}
+async function removeDevice(d) {
+  delete SU.errs.list;
+  const r = await api('DELETE', '/api/setup/devices/' + encodeURIComponent(d.ip), {});
+  if (!r.ok) { SU.errs.list = r.text; renderView(`[data-focus="remove:${d.ip}"]`); return; }
+  applyDevices(r.data);
+  toast(`${deviceLabel(d)} can no longer connect.`, () => restoreDevice(d));
+  renderView('[data-focus="pane-title"]');
+}
+async function restoreDevice(d) {
+  const r = await api('POST', '/api/setup/devices', {ip: d.ip, name: d.name || ''});
+  if (!r.ok) { SU.errs.list = r.text; renderView('[data-focus="pane-title"]'); return; }
+  applyDevices(r.data);
+  toast(`${deviceLabel(d)} can connect again.`);
+  renderView('[data-focus="pane-title"]');
+}
+// Add a device: IP (required) and Name (optional). The draft lives in SU.devForm, so a redraw keeps what was typed.
+function addDeviceForm() {
+  const f = SU.devForm;
+  const ip = h('input', {type: 'text', inputmode: 'decimal', autocomplete: 'off', spellcheck: 'false', value: f.ip, 'data-focus': 'dev-ip',
+    oninput: () => { f.ip = ip.value; setErr(ip, ''); }});
+  const name = h('input', {type: 'text', maxlength: '60', autocomplete: 'off', value: f.name, 'data-focus': 'dev-name',
+    oninput: () => { f.name = name.value; setErr(name, ''); }});
+  const submit = h('button', {type: 'submit', class: 'su-btn go', 'data-focus': 'dev-add', text: 'Add device'});
+  return h('form', {class: 'su-stack', novalidate: true, onsubmit: e => { e.preventDefault(); addDevice(); }},
+    labelled('IP address', ip, 'The address the other computer has on your network, such as 192.168.1.20.'),
+    labelled('Name (optional)', name, 'For example Anna\'s laptop.'),
+    errAt('add'),
+    h('div', {class: 'su-bar'}, submit));
+}
+async function addDevice() {
+  const f = SU.devForm, ipEl = document.querySelector('#setup [data-focus="dev-ip"]'), nameEl = document.querySelector('#setup [data-focus="dev-name"]');
+  const eIp = validateDeviceIp(f.ip), eName = validateDeviceName(f.name);
+  if (ipEl) setErr(ipEl, eIp);
+  if (nameEl) setErr(nameEl, eName);
+  if (eIp || eName) { (eIp && ipEl ? ipEl : nameEl).focus(); return; }
+  delete SU.errs.add;
+  const ip = f.ip.trim(), name = f.name.trim();
+  const r = await api('POST', '/api/setup/devices', {ip, name});
+  if (!r.ok) { SU.errs.add = r.text; renderView('[data-focus="dev-ip"]'); return; }
+  applyDevices(r.data);
+  SU.devForm = {ip: '', name: ''};
+  toast(`${name || ip} can now connect.`);
+  renderView('[data-focus="dev-ip"]');
+}
+
 // Verify (state table): the Verify button of one camera. One camera at a time; a refused login stops the run.
 async function verifyCam(c) {
   if (SU.busy) return;
@@ -1391,6 +1616,7 @@ async function verifyCam(c) {
 // Countdown: text once a second (aria-hidden). When a wait ends the page is redrawn, unless a text field has focus.
 function tickCountdowns() {
   const now = Date.now();
+  paintSeen();
   let ended = false;
   document.querySelectorAll('#setup [data-until]').forEach(n => {
     const left = (+n.dataset.until - now) / 1000;
@@ -1419,6 +1645,7 @@ async function boot() {
   window.addEventListener('popstate', onPop);
   byId('sumark').replaceChildren(icon('mark', 'su-mark'));
   setInterval(tickCountdowns, 1000);
+  setInterval(devicesTick, 5000);
   const [cams, st] = await Promise.all([api('GET', '/api/cameras'), api('GET', '/api/setup/state')]);
   const stateOk = st.ok && st.data && Array.isArray(st.data.cameras);   // a body that is not the expected JSON is a failed read
   if (stateOk) absorb(st.data);

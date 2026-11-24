@@ -6,7 +6,8 @@ const names = ['signInText', 'signInValue', 'cameraAccountGiven', 'loginLabel', 
   'validateName', 'validateEmail', 'validateSecret', 'validateAddForm', 'numberError', 'verifyHold', 'modelMismatch', 'seenModel',
   'modelPatchBody', 'modelFixBody', 'isAuthFailure', 'dialogCopy', 'friendlyVerifyReason', 'plainError', 'camState', 'liveRow',
   'pickSelection', 'verifyTitle', 'verifyLead', 'openReason', 'prereqRows', 'themeLabel', 'themeAria', 'themeIconName',
-  'addButtonLabel', 'accountPlan', 'validateAddRow', 'addBatchPlan', 'addBatchBody', 'runAddBatch', 'movedOrder'];
+  'addButtonLabel', 'accountPlan', 'validateAddRow', 'addBatchPlan', 'addBatchBody', 'runAddBatch', 'movedOrder',
+  'devicesSubtitle', 'validateDeviceIp', 'validateDeviceName', 'agoText', 'devicesKey', 'deviceLabel'];
 const ctx = {}; vm.createContext(ctx);
 vm.runInContext(block + ';' + names.map(n => `this.${n}=${n};`).join(''), ctx);
 const F = ctx;
@@ -254,6 +255,14 @@ check('theme: a radio group with arrow keys (role radiogroup and radio, one tab 
 check('headings: the sidebar group labels are not headings', !/h3', \{class: 'su-grp-h'/.test(setupjs) && setupjs.includes("'aria-labelledby': id"));
 check('phone header: the detail screen names the item, not Settings', setupjs.includes("settings ? (detail ? paneTitle() : 'Settings') : 'Camera setup'"));
 check('no inline style attribute or inline handler is added to the page', !/\sstyle=|\son(click|change|input|keydown)=/.test(html + setupjs));
+
+// Other devices: the sidebar line, the address and name checks, the waiting-time text, the redraw key
+check('devices: sidebar line is Off, or On with the number allowed', F.devicesSubtitle(null) === '' && F.devicesSubtitle({sharing: false, devices: [{ip: '192.168.1.2'}]}) === 'Off' && F.devicesSubtitle({sharing: true, devices: []}) === 'On, 0 allowed' && F.devicesSubtitle({sharing: true, devices: [{ip: '192.168.1.2'}, {ip: '192.168.1.3'}]}) === 'On, 2 allowed');
+check('devices: IP error text is the agreed sentence, and valid addresses pass', F.validateDeviceIp('192.168.1.20') === '' && F.validateDeviceIp(' 10.0.0.9 ') === '' && F.validateDeviceIp('192.168.1') === "Enter the device's IP address, like 192.168.1.20" && F.validateDeviceIp('') !== '');
+check('devices: name is optional and at most 60 characters', F.validateDeviceName('') === '' && F.validateDeviceName("Anna's laptop") === '' && F.validateDeviceName('a'.repeat(60)) === '' && F.validateDeviceName('a'.repeat(61)) !== '');
+check('devices: time ago in words', F.agoText(5) === 'a moment ago' && F.agoText(59) === 'a moment ago' && F.agoText(60) === '1 min ago' && F.agoText(3599) === '59 min ago' && F.agoText(3600) === '1 hour ago' && F.agoText(7200) === '2 hours ago' && F.agoText(86400) === '1 day ago' && F.agoText(-4) === 'a moment ago' && F.agoText(3 * 86400) === '3 days ago');
+check('devices: the redraw key ignores the last-seen times and changes with the list', F.devicesKey(null) === '' && F.devicesKey({sharing: true, devices: [], pending: [{ip: '192.168.1.9', last_seen: 1}]}) === F.devicesKey({sharing: true, devices: [], pending: [{ip: '192.168.1.9', last_seen: 99}]}) && F.devicesKey({sharing: true, devices: [], pending: []}) !== F.devicesKey({sharing: true, devices: [], pending: [{ip: '192.168.1.9', last_seen: 1}]}));
+check('devices: label is the name, or the address when unnamed', F.deviceLabel({ip: '192.168.1.2', name: "Anna's laptop"}) === "Anna's laptop" && F.deviceLabel({ip: '192.168.1.2', name: ''}) === '192.168.1.2');
 
 function finish() {
   console.log(ok ? 'ALL PASS' : 'SOME FAILED'); process.exit(ok ? 0 : 1);

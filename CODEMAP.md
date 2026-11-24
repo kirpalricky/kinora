@@ -8,6 +8,7 @@ A local aiohttp server plus a single-page UI that plays back the SD cards of thr
 | Concern | Path | Drill-down doc |
 |---------|------|----------------|
 | HTTP routes, middleware, clip/thumb handlers | `kinora/server.py` (root `server.py` is a dev shim) | `docs/codemap/backend.md` |
+| Other devices (allowed list, sharing, network socket, waiting list) | `kinora/devices.py`, `kinora/services/devices_api.py`, Settings pane in `kinora/web/static/setup.js` | `docs/codemap/backend.md`, `docs/codemap/frontend.md` |
 | Camera table, paths, tunables | `kinora/config.py`, `cameras.json` | `docs/codemap/backend.md`, `docs/codemap/frontend.md` (flags) |
 | Login gate, pytapo patch, sessions | `kinora/camera/{gate,patch,session}.py` | `docs/codemap/backend.md` |
 | Video slot arbitration (clip, play, live) | `kinora/camera/slots.py` | `docs/codemap/backend.md` |
