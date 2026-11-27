@@ -45,6 +45,7 @@ class Route(unittest.TestCase):
                   mock.patch.object(server.session, "check_usable", lambda cam: None),
                   mock.patch.object(server, "client", lambda cam: object()),
                   mock.patch.object(server, "_native_unsupported", set()),
+                  mock.patch.object(server, "THUMB_P2P_GAP_S", 0),   # the P2P gap has its own tests (test_thumb)
                   mock.patch.object(slots, "_live_running", lambda cid: False),
                   mock.patch.object(slots, "_play_active", lambda cid: False)):
             p.start()

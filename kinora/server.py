@@ -21,6 +21,8 @@ import datetime
 import errno
 import ipaddress
 import json
+import logging
+import math
 import os
 import re
 import shutil
@@ -147,58 +149,68 @@ def media_gate(cam, start, end):
         raise web.HTTPServiceUnavailable(text="this clip failed recently")
 
 
-def media_failed(cam, start, end):
+def media_failed(cam, start, end, count=True):
     """Remember an empty download. Only old windows count towards pausing the camera: for recent
-    ones 'no video' usually just means the recording is still being written or the camera is busy."""
+    ones 'no video' usually just means the recording is still being written or the camera is busy.
+    count=False (thumbnails): the window is memoised but never counts towards the pause."""
     cid = cam["id"]
     _fail[(cid, start, end)] = time.time()
-    if end < time.time() - COUNT_FAILS_OLDER_THAN:
+    if count and end < time.time() - COUNT_FAILS_OLDER_THAN:
         _media_fails[cid] = _media_fails.get(cid, 0) + 1
         if _media_fails[cid] >= 2:
             _media_block[cid] = time.time() + MEDIA_BLOCK_S
 
 
-async def fetch_media(cam, start, end, name, *, raise_busy=False, beside_live=False):
-    """Download [start, end] from the camera into CACHE/name. raise_busy: let slots.Busy through (thumb answers 202)."""
+async def fetch_media(cam, start, end, name, *, raise_busy=False, beside_live=False, thumb=False):
+    """Download [start, end] from the camera into CACHE/name. raise_busy: let slots.Busy through (thumb answers 202).
+    thumb: a thumbnail's download (short limits, never counts towards the camera's download pause)."""
     if (CACHE / name).exists():
         return
     try:
         async with slots.clip(cam, beside_live=beside_live):
-            await _download(cam, start, end, name)
+            await _download(cam, start, end, name, thumb=thumb)
     except slots_mod.Busy as e:
         if raise_busy:
             raise
         raise web.HTTPServiceUnavailable(text=str(e))
 
 
-async def _download(cam, start, end, name):
-    """Runs with the camera's media lock held (slots.clip)."""
+async def _download(cam, start, end, name, thumb=False):
+    """Runs with the camera's media lock held (slots.clip). thumb: see fetch_media."""
     if (CACHE / name).exists():
         return
     require_pytapo_tools()   # before any login or media request: a missing ffprobe/ffmpeg is not a camera failure
     media_gate(cam, start, end)
     t = await asyncio.to_thread(client, cam)
-    part = name[:-4] + ".part.mp4"          # never serve or cache a half-written file
+    part = _part_name(name)                  # never serve or cache a half-written file
     (CACHE / part).unlink(missing_ok=True)
+    count = not thumb                        # a thumbnail's failure is memoised per window, never pauses the camera
     if cam.get("p2p"):
         # SD playback only through the app's P2P (UDT) channel, e.g. C100 v2 fw 1.3.17: see p2p_media.py
         try:
-            await p2p_media.fetch_window(lambda fn: api(cam, fn), t, cam, start, end, str(CACHE / part))
+            if thumb:
+                await asyncio.wait_for(p2p_media.fetch_window(
+                    lambda fn: api(cam, fn), t, cam, start, end, str(CACHE / part),
+                    stall_s=THUMB_STALL_S, hard_limit_s=THUMB_HARD_S, channels=thumb_channels(cam),
+                    still=still_mode(cam), still_min_bytes=THUMB_STILL_MIN_BYTES, still_max_s=THUMB_STILL_MAX_S), THUMB_TOTAL_S)
+            else:
+                await p2p_media.fetch_window(lambda fn: api(cam, fn), t, cam, start, end, str(CACHE / part))
         except p2p_media.Busy:
             raise web.HTTPServiceUnavailable(
                 text=f"{cam['name']}: camera is busy (another app or viewer holds a video stream)")
         except (CameraError, web.HTTPException):   # a gate refusal must not count as a failed download
             raise
-        except Exception as e:
+        except Exception as e:                      # includes asyncio.TimeoutError from the thumbnail limit
             if MARK in str(e):
                 raise as_http(e)
-            media_failed(cam, start, end)
+            media_failed(cam, start, end, count=count)
             raise web.HTTPBadGateway(text=f"{cam['name']}: {str(e)[:160] or 'camera returned no video'}")
         if not (CACHE / part).exists():
-            media_failed(cam, start, end)
+            media_failed(cam, start, end, count=count)
             raise web.HTTPBadGateway(text=f"{cam['name']}: camera returned no video")
         os.replace(CACHE / part, CACHE / name)
-        _media_fails[cam["id"]] = 0
+        if count:
+            _media_fails[cam["id"]] = 0
         return
     # primes pytapo's cached calls; returns the client that is actually used (the session may be replaced)
     t, corr, _ = await api(cam, lambda t: (t, t.getTimeCorrection(), t.getUserID()))
@@ -209,16 +221,17 @@ async def _download(cam, start, end, name):
     except Exception as e:
         if MARK in str(e):
             raise as_http(e)
-        media_failed(cam, start, end)
+        media_failed(cam, start, end, count=count)
         raise web.HTTPBadGateway(text=f"{cam['name']}: camera returned no video")
     if isinstance(status, dict) and status.get("errorCode") in Downloader.BUSY_ERROR_CODES:
         raise web.HTTPServiceUnavailable(           # busy is not a failure: no memo, no pause
             text=f"{cam['name']}: camera is busy (another app or viewer holds a video stream)")
     if not (CACHE / part).exists():
-        media_failed(cam, start, end)
+        media_failed(cam, start, end, count=count)
         raise web.HTTPBadGateway(text=f"{cam['name']}: camera returned no video")
     os.replace(CACHE / part, CACHE / name)
-    _media_fails[cam["id"]] = 0
+    if count:
+        _media_fails[cam["id"]] = 0
 
 
 async def clip(request):
@@ -245,7 +258,21 @@ async def clip(request):
 
 THUMB_WAIT_S = 1.0          # the most a thumbnail request waits for the camera's media lock (playback shares it)
 THUMB_RETRY_S = 5           # Retry-After for a busy answer
+THUMB_P2P_GAP_S = 10        # least time between two P2P thumbnail sessions of one camera (the baby monitor has ~2 stream slots)
+THUMB_STALL_S = 6           # P2P thumbnail download: stall limit and hard limit, short so the media lock is never held long
+THUMB_HARD_S = 12
+THUMB_TOTAL_S = 22          # overall cap of one thumbnail download: under services/play.py LOCK_WAIT_S (25 s)
 THUMB_HEADERS = {"Cache-Control": "public, max-age=31536000, immutable"}   # keyed by event time: never changes
+_thumb_p2p_end = {}         # camera id -> time.monotonic() when its last thumbnail fetch attempt ended (P2P gap)
+THUMB_SEG_S = 1             # seconds of video in one thumbnail clip: one frame is all a thumbnail needs (cameras.json thumb_seg, 1..3, per camera)
+THUMB_STILL_MIN_BYTES = 150_000   # fast still mode (cameras.json thumb_fast, default on): a thumbnail's stream ends after this much video ...
+THUMB_STILL_MAX_S = 2.5           # ... in at least 2 chunks, or this long after its first video chunk, whichever comes first
+THUMB_BATCH_N = 4           # P2P batch: one session makes the requested thumbnail plus up to THUMB_BATCH_N-1 older neighbours (cameras.json thumb_batch)
+THUMB_BATCH_BG_S = 25       # the rest of a batch may run this long beyond the batch start (it runs after the requested thumbnail is ready; Play waits 25 s)
+_batch_unsupported = set()  # camera ids that refused a second playback request on one session (per process): single thumbnails from then on
+_batch_tasks = {}           # camera id -> the background batch task; it holds the camera's media lock until it ends
+THUMB_CHANNELS = [1]        # EXPERIMENT, off by default: channel 1 selects a second lens (the C100 has one): expected to fail, see OPERATIONS
+MAIN_CHANNELS = [0]         # thumbnails' default: the main stream (what the app's playback uses)
 
 
 async def _media_lock_free(cam, wait_s=THUMB_WAIT_S):
@@ -259,10 +286,10 @@ async def _media_lock_free(cam, wait_s=THUMB_WAIT_S):
     return True
 
 
-def thumb_busy(reason):
+def thumb_busy(reason, retry_s=None):
     """202 'try later': the camera's video slot is in use (live view, playback, a clip). Not a failure."""
     return web.json_response({"state": "busy", "reason": reason}, status=202,
-                             headers={"Retry-After": str(THUMB_RETRY_S)})
+                             headers={"Retry-After": str(THUMB_RETRY_S if retry_s is None else retry_s)})
 
 
 _native_unsupported = set()   # (camera id, mode) pairs that refused the native thumbnail request: no further P2P sessions for them (per process)
@@ -299,7 +326,10 @@ async def _native_thumb(cam, ts, jpg, mode):
         async with slots.clip(cam, beside_live=cam.get("thumbs_beside_live", True) is not False):
             if not jpg.exists():
                 t = await asyncio.to_thread(client, cam)
-                await fetch(lambda fn: api(cam, fn), t, cam, ts, str(jpg), log=log)
+                try:
+                    await fetch(lambda fn: api(cam, fn), t, cam, ts, str(jpg), log=log)
+                finally:
+                    _thumb_p2p_end[cid] = time.monotonic()
     except slots_mod.Busy as e:
         return thumb_busy(str(e))
     except p2p_media.Busy as e:
@@ -321,8 +351,216 @@ async def _native_thumb(cam, ts, jpg, mode):
     return web.FileResponse(jpg, headers=THUMB_HEADERS)
 
 
+def thumb_channels(cam):
+    """The camera channels a P2P thumbnail asks for: the main stream (channel 0) unless cameras.json says thumb_channel 1 (experiment)."""
+    if cam.get("thumb_channel") == 1:
+        return list(THUMB_CHANNELS)
+    return list(MAIN_CHANNELS)
+
+
+def _item0_budget(cam):
+    """Seconds the requested thumbnail (batch item 0) may wait: THUMB_TOTAL_S with the main stream. With channel 1 opted in, one silent
+    stall (THUMB_STALL_S) and 6 s more must fit as well."""
+    return THUMB_TOTAL_S if thumb_channels(cam) == MAIN_CHANNELS else THUMB_TOTAL_S + THUMB_STALL_S + 6
+
+
+def _why(err):
+    """The cause of a failed batch for the log: type and message (160 chars at most), no secrets beyond the camera's own text."""
+    if err is None:
+        return "NothingSaved: no item was saved"
+    text = str(err)[:160] or ("cancelled" if isinstance(err, asyncio.CancelledError) else "no message")
+    return "%s: %s" % (type(err).__name__, text)
+
+
+def _batch_on(cam):
+    """P2P cameras batch their generic thumbnails unless cameras.json says thumb_batch false or the camera refused a second request."""
+    return bool(cam.get("p2p")) and cam.get("thumb_batch", True) is not False and cam["id"] not in _batch_unsupported
+
+
+def thumb_seg(cam):
+    """Seconds of video one thumbnail clip asks for: THUMB_SEG_S, or cameras.json thumb_seg (an int 1..3, checked at load) for a
+    camera whose stills come out wrong."""
+    return cam.get("thumb_seg", THUMB_SEG_S)
+
+
+def thumb_fast(cam):
+    """cameras.json thumb_fast (bool, default true, checked at load): the P2P thumbnail stream is kept as raw MPEG-TS and given to
+    ffmpeg without pytapo's Convert (fast still mode). false: the Convert-based clip of thumb_seg, as before."""
+    return cam.get("thumb_fast", True) is not False
+
+
+def still_mode(cam):
+    """The fast still mode applies to P2P thumbnails only (the Downloader path of other cameras has no raw stream)."""
+    return bool(cam.get("p2p")) and thumb_fast(cam)
+
+
+def _part_name(name):
+    """The half-written name of a download: thumb_x.ts -> thumb_x.part.ts, clip.mp4 -> clip.part.mp4."""
+    root, ext = os.path.splitext(name)
+    return root + ".part" + ext
+
+
+def _batch_starts(cam, ts):
+    """[ts] + up to THUMB_BATCH_N-1 older event starts of the same local day, newest first. The events come from the listing cache on
+    disk (the camera is never asked). Skipped: a window that already has a thumbnail, failed recently or is still being recorded.
+    No listing, or one that cannot be read, gives [ts] alone."""
+    cid = cam["id"]
+    seg = thumb_seg(cam)
+    batch = [ts]
+    if time.time() < _media_block.get(cid, 0):   # downloads paused: only the requested thumbnail (it answers 503)
+        return batch
+    day = datetime.datetime.fromtimestamp(ts)
+    day_start = day.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+    try:
+        events = json.loads((META / f"{cid}_{day.strftime('%Y%m%d')}_ev.json").read_text())
+        starts = sorted({e.get("start") for e in events if type(e.get("start")) is int}, reverse=True)
+    except (OSError, ValueError, TypeError, AttributeError):
+        return batch
+    limit = media_limit(cam)
+    for s in starts:
+        if len(batch) >= THUMB_BATCH_N:
+            break
+        if not day_start <= s < ts or s + seg > limit:
+            continue
+        if (CACHE / f"{cid}_{s}.jpg").exists() or time.time() - _fail.get((cid, s, s + seg), 0) < WINDOW_FAIL_TTL:
+            continue
+        batch.append(s)
+    return batch
+
+
+async def _still(mp4, jpg):
+    """One ffmpeg still (320 px wide) of a thumbnail clip: the command of the single thumbnail path."""
+    proc = await asyncio.create_subprocess_exec(
+        ffmpeg_path(), "-v", "error", "-y", "-i", str(mp4), "-frames:v", "1", "-vf", "scale=320:-2", str(jpg))
+    await proc.wait()
+
+
+def _batch_error(cam, e):
+    """The answer for a batch's failed requested thumbnail, mapped as _download and fetch_media do: a slots Busy is answered 202 by
+    thumb(); a P2P Busy is 503, as before."""
+    if isinstance(e, (slots_mod.Busy, CameraError, web.HTTPException)):
+        return e
+    if isinstance(e, p2p_media.Busy):
+        return web.HTTPServiceUnavailable(text=f"{cam['name']}: camera is busy (another app or viewer holds a video stream)")
+    if MARK in str(e):
+        return as_http(e)
+    return web.HTTPBadGateway(text=f"{cam['name']}: {str(e)[:160] or 'camera returned no video'}")
+
+
+async def _batch_run(cam, items, first, state):
+    """The batch as a background task (see _batch_thumb). It holds the camera's media lock from start to end. `first` (the requested
+    thumbnail) is set as soon as its jpg exists; the other items only fill the cache. state["stage"] tracks where the batch is
+    (setup | request | still | video | stopped) for the log. Every outcome is logged: a failed batch first, one line with its cause
+    and stage, then the summary line. A plain failure is remembered for its window only (never counts towards the download pause)."""
+    cid = cam["id"]
+    seg = thumb_seg(cam)
+    fast = still_mode(cam)
+    saved, nofr, err, reuse_failed, stopped_early, codes = [], [], None, False, False, []
+
+    async def on_item(i, start, out):
+        state["stage"] = "still"
+        jpg = CACHE / f"{cid}_{start}.jpg"
+        await _still(out, jpg)
+        if fast and not jpg.exists():   # the stream held no decodable frame: a failed window, memoised only (never counted)
+            nofr.append(i)
+            print(f"[thumb {cid} batch {items[0][0]}] failed: NoFrame (stage: still)", file=sys.stderr, flush=True)
+            media_failed(cam, start, start + seg, count=False)
+            if i == 0 and not first.done():
+                first.set_exception(web.HTTPBadGateway(text=f"{cam['name']}: no frame in the recording"))
+            state["stage"] = "video"
+            return
+        saved.append(i)
+        state["stage"] = "video"
+        if i == 0 and not first.done():
+            first.set_result(True)
+
+    try:
+        async with slots.clip(cam, beside_live=cam.get("thumbs_beside_live", True) is not False):
+            require_pytapo_tools()
+            media_gate(cam, items[0][0], items[0][0] + seg)   # a refusal here never reaches the camera
+            t = await asyncio.to_thread(client, cam)
+            chans = thumb_channels(cam)
+            state["stage"] = "request"
+            _, reuse_failed, stopped_early, codes = await asyncio.wait_for(
+                p2p_media.fetch_windows(lambda fn: api(cam, fn), t, cam, items, seg=seg, stall_s=THUMB_STALL_S,
+                                        hard_limit_s=THUMB_HARD_S, should_stop=lambda: slots.play_wanted(cid), on_item=on_item,
+                                        channels=chans, still=fast, still_min_bytes=THUMB_STILL_MIN_BYTES,
+                                        still_max_s=THUMB_STILL_MAX_S),
+                THUMB_TOTAL_S + THUMB_BATCH_BG_S)
+            if stopped_early:
+                state["stage"] = "stopped"
+            if reuse_failed:   # not remembered per window: the single path may still work for that event
+                _batch_unsupported.add(cid)
+                print(f"[thumb {cid} batch] session reuse unsupported", file=sys.stderr, flush=True)
+    except asyncio.CancelledError as e:   # the requested thumbnail's timeout or a shutdown: logged below, then re-raised
+        err = e
+        raise
+    except Exception as e:                # Busy, CameraError, gate refusals, HTTPException: all logged, none silent
+        err = e
+    finally:
+        stage = state["stage"]
+        if stage != "setup":   # a refusal before the camera was reached leaves the P2P gap alone
+            _thumb_p2p_end[cid] = time.monotonic()
+        for _, out in items:
+            Path(out).unlink(missing_ok=True)
+        mapped = _batch_error(cam, err) if err is not None else web.HTTPBadGateway(text=f"{cam['name']}: camera returned no video")
+        only_noframe = err is None and not saved and bool(nofr)   # the NoFrame lines already said why
+        if (err is not None or not saved) and not only_noframe:
+            print(f"[thumb {cid} batch {items[0][0]}] failed: {_why(err)} (stage: {stage})", file=sys.stderr, flush=True)
+        if only_noframe:
+            cause = "NoFrame: %d item(s) without a decodable frame" % len(nofr)
+        elif err is not None or not saved:
+            cause = _why(err)
+        elif reuse_failed:
+            cause = "ReuseRefused: the camera refused a second playback request"
+        elif not stopped_early and len(saved) < len(items) and any(c in p2p_media.BUSY_CODES for c in codes):
+            cause = "StaleStream: busy code on a later request"
+        else:
+            cause = "none"
+        print(f"[thumb {cid} batch] n={len(items)} ok={len(saved)} cause={cause} stage={stage} codes={list(codes)}",
+              file=sys.stderr, flush=True)
+        if err is not None and isinstance(mapped, web.HTTPBadGateway) and len(saved) < len(items):
+            s = items[len(saved)][0]
+            media_failed(cam, s, s + seg, count=False)
+        if not first.done():
+            first.set_exception(mapped)
+
+
+async def _batch_thumb(cam, ts, jpg):
+    """The generic P2P thumbnail as a batch (p2p_media.fetch_windows, see _batch_starts). Answers as soon as ts's own jpg exists; the
+    older neighbours finish in a background task that holds the camera's media lock until it ends, so other requests get 202 meanwhile."""
+    cid = cam["id"]
+    if not await _media_lock_free(cam):
+        return thumb_busy(f"{cam['name']}: a clip download or export is using the camera")
+    ext = ".ts" if still_mode(cam) else ".mp4"   # fast still mode: the raw stream, see thumb_fast
+    items = [(s, CACHE / f"thumb_{cid}_{s}{ext}") for s in _batch_starts(cam, ts)]
+    first = asyncio.get_running_loop().create_future()
+    state = {"stage": "setup"}
+    task = asyncio.create_task(_batch_run(cam, items, first, state))
+    _batch_tasks[cid] = task
+
+    def forget(done):
+        if _batch_tasks.get(cid) is done:
+            del _batch_tasks[cid]
+    task.add_done_callback(forget)
+    budget = _item0_budget(cam)
+    try:
+        await asyncio.wait_for(first, budget)
+    except asyncio.TimeoutError:
+        print(f"[thumb {cid} batch {ts}] requested thumbnail timed out after {budget}s at stage {state['stage']}",
+              file=sys.stderr, flush=True)
+        task.cancel()   # the batch ends now and releases the camera's media lock (it is never left running)
+        media_failed(cam, ts, ts + thumb_seg(cam), count=False)
+        raise web.HTTPBadGateway(text=f"{cam['name']}: camera returned no video")
+    except slots_mod.Busy as e:
+        return thumb_busy(str(e))
+    if not jpg.exists():
+        raise web.HTTPNotFound()
+    return web.FileResponse(jpg, headers=THUMB_HEADERS)
+
+
 async def thumb(request):
-    """First frame of an event: ~3 s download, one ffmpeg still, cached as jpg.
+    """First frame of an event: a THUMB_SEG_S (1 s) download, one ffmpeg still, cached as jpg.
     200 jpg | 202 busy (Retry-After) | 404 no thumbnail | 409 still recording | 4xx/5xx real failure."""
     cam = get_cam(request)
     session.check_usable(cam)
@@ -336,23 +574,39 @@ async def thumb(request):
         raise web.HTTPNotFound(text="the camera does not serve native thumbnails")
     if cam.get("thumbs") is False and not native:   # e.g. P2P cameras: a thumbnail would cost a whole P2P session each
         raise web.HTTPNotFound(text="no thumbnails for this camera")
-    ahead = ts + 3 - media_limit(cam)
+    seg = thumb_seg(cam)
+    ahead = ts + seg - media_limit(cam)
     if ahead > 0:   # the camera returns nothing for the newest seconds: tell the page when to ask again
         raise web.HTTPConflict(text="still recording", headers={"Retry-After": str(min(120, max(5, ahead + 2)))})
     jpg = CACHE / f"{cam['id']}_{ts}.jpg"
+    last_end = _thumb_p2p_end.get(cam["id"])
+    if cam.get("p2p") and not jpg.exists() and last_end is not None:   # one P2P thumbnail session, then a pause
+        wait = THUMB_P2P_GAP_S - (time.monotonic() - last_end)
+        if wait > 0:
+            return thumb_busy(f"{cam['name']}: the last thumbnail is still being fetched from the camera",
+                              retry_s=max(1, math.ceil(wait)))
     if native and not jpg.exists():
         return await _native_thumb(cam, ts, jpg, mode)
+    if not jpg.exists() and _batch_on(cam):
+        return await _batch_thumb(cam, ts, jpg)
     if not jpg.exists():
-        tmp = f"thumb_{cam['id']}_{ts}.mp4"
+        still = still_mode(cam)
+        tmp = f"thumb_{cam['id']}_{ts}{'.ts' if still else '.mp4'}"
         try:
             if not await _media_lock_free(cam):
                 return thumb_busy(f"{cam['name']}: a clip download or export is using the camera")
-            await fetch_media(cam, ts, ts + 3, tmp, raise_busy=True,
-                              beside_live=cam.get("thumbs_beside_live", True) is not False)
+            try:
+                await fetch_media(cam, ts, ts + seg, tmp, raise_busy=True,
+                                  beside_live=cam.get("thumbs_beside_live", True) is not False, thumb=True)
+            finally:
+                _thumb_p2p_end[cam["id"]] = time.monotonic()
             proc = await asyncio.create_subprocess_exec(
                 ffmpeg_path(), "-v", "error", "-y", "-i", str(CACHE / tmp), "-frames:v", "1",
                 "-vf", "scale=320:-2", str(jpg))
             await proc.wait()
+            if still and not jpg.exists():   # the stream held no decodable frame: memoised only (never counted)
+                print(f"[thumb {cam['id']} {ts}] failed: NoFrame (stage: still)", file=sys.stderr, flush=True)
+                media_failed(cam, ts, ts + seg, count=False)
         except slots_mod.Busy as e:
             return thumb_busy(str(e))
         except Exception as e:
@@ -360,6 +614,7 @@ async def thumb(request):
             raise
         finally:
             (CACHE / tmp).unlink(missing_ok=True)
+            (CACHE / _part_name(tmp)).unlink(missing_ok=True)   # a still stream is written in place: a failed one leaves its part
     if not jpg.exists():
         raise web.HTTPNotFound()
     return web.FileResponse(jpg, headers=THUMB_HEADERS)
@@ -614,6 +869,8 @@ async def prune(app):
     app["play_reaper"].cancel()
     await p2p_play.stop_all()
     await live.stop_all(LIVE_ROOT, CAMS)
+    for task in list(_batch_tasks.values()):   # a background thumbnail batch: its P2P session ends with the server
+        task.cancel()
 
 
 ALLOWED_HOSTS = config.allowed_hosts(config.PORT)
@@ -844,9 +1101,28 @@ async def _serve(app):
         await runner.cleanup()
 
 
+PYTAPO_NOISE = "Received response with no or invalid session information"
+
+
+class _PytapoNoise(logging.Filter):
+    """Drops exactly pytapo's PYTAPO_NOISE warning. The camera keeps sending into a playback session that has ended, and pytapo logs
+    one warning per message. Every other record of that logger passes."""
+
+    def filter(self, record):
+        return not record.getMessage().startswith(PYTAPO_NOISE + " (sequence ")
+
+
+def quiet_pytapo():
+    """Install _PytapoNoise on pytapo's media session logger (pytapo/media_stream/session.py, logger.warning). Idempotent."""
+    log = logging.getLogger("pytapo.media_stream.session")
+    if not any(isinstance(f, _PytapoNoise) for f in log.filters):
+        log.addFilter(_PytapoNoise())
+
+
 def main(on_started=None):
     """Start the server (blocking). Used by `python server.py` and by kinora.cli.
     on_started() runs once the single-instance lock is held, just before the server starts listening."""
+    quiet_pytapo()
     prepend_ffmpeg_dir_to_path()          # KINORA_FFMPEG's folder first on PATH: pytapo finds ffmpeg/ffprobe beside it
     instance.record_port(config.PORT)   # the lock is already held: instance.startup() runs before this module is imported
     if on_started:
