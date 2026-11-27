@@ -79,6 +79,7 @@ check('timeline keys: Left/Right 10 s, Shift 60 s, other keys null', F.timelineK
 
 // Static rules for the page: no style attributes (CSP), no inline handlers in the markup or the templates
 const html = fs.readFileSync(__dirname + '/../kinora/web/index.html', 'utf8');
+const css = fs.readFileSync(__dirname + '/../kinora/web/static/app.css', 'utf8');   // the page CSS moved here (B3)
 check('no style= attribute in app.js or index.html markup', !/\sstyle\s*=/.test(src) && !/\sstyle\s*=/.test(html.replace(/<style>[\s\S]*?<\/style>/g, '')));
 check('no inline event handlers (on*=) in index.html or app.js templates', !/\son[a-z]+\s*=\s*["']/.test(html) && !/<[^>]*\son[a-z]+=/.test(src));
 
@@ -137,12 +138,12 @@ check('loader: resets on camera or day change (load) and pauses via liveOn', /th
 // Player layout (the design notes): static checks; the measured checks are done in a browser
 const at2 = s => html.indexOf(s);
 check('camstat sits after the transport bar and after the video (so showing it never moves the video)', at2('id="camstat"') > at2('id="vwrap"') && at2('id="camstat"') > at2('class="bar"') && at2('id="camstat"') < at2('id="livestat"'));
-check('no leftover 346px height math or 290px chrome in index.html', !/346px|290px/.test(html));
-check('#app has no max-width cap (app bar and content span the page)', /#app\{max-width:none/.test(html) && !/#app\{max-width:640px/.test(html));
-const rootBlock = html.match(/:root\{--gut:[^}]*\}/);
-check('root spacing variables exist with the spec values (base)', !!rootBlock && /--gut:16px/.test(rootBlock[0]) && /--pt:var\(--s-3\)/.test(rootBlock[0]) && /--bar-h:52px/.test(rootBlock[0]) && /--max:1760px/.test(rootBlock[0]) && /--side:clamp\(320px,26vw,440px\)/.test(rootBlock[0]) && /--chrome:328px/.test(rootBlock[0]));
-check('root spacing variables: 600px, 960px and 960-1279px overrides', /@media\(min-width:600px\)\{:root\{--gut:var\(--s-6\);--pt:var\(--s-4\);--bar-h:56px\}\}/.test(html) && /@media\(min-width:960px\)\{:root\{--gut:var\(--s-7\);--pt:var\(--s-6\)\}\}/.test(html) && /@media\(min-width:960px\) and \(max-width:1279px\)\{:root\{--chrome:376px\}\}/.test(html));
-const ptzRule = (html.match(/#vwrap #ptz\{[^}]*\}/) || [''])[0];
+check('no leftover 346px height math or 290px chrome in app.css', !/346px|290px/.test(css));
+check('#app has no max-width cap (app bar and content span the page)', /#app\{max-width:none/.test(css) && !/#app\{max-width:640px/.test(css));
+const rootBlock = css.match(/:root\{--gut:[^}]*\}/);
+check('root spacing variables exist with the spec values (base)', !!rootBlock && /--gut:16px/.test(rootBlock[0]) && /--pt:var\(--s-3\)/.test(rootBlock[0]) && /--bar-h:56px/.test(rootBlock[0]) && /--max:1760px/.test(rootBlock[0]) && /--side:clamp\(320px,26vw,440px\)/.test(rootBlock[0]) && /--chrome:336px/.test(rootBlock[0]));
+check('root spacing variables: 600px, 960px and 960-1279px overrides', /@media\(min-width:600px\)\{:root\{--gut:var\(--s-6\);--pt:var\(--s-4\);--bar-h:64px\}\}/.test(css) && /@media\(min-width:960px\)\{:root\{--gut:var\(--s-7\);--pt:var\(--s-6\)\}\}/.test(css) && /@media\(min-width:960px\) and \(max-width:1279px\)\{:root\{--chrome:384px\}\}/.test(css));
+const ptzRule = (css.match(/#vwrap #ptz\{[^}]*\}/) || [''])[0];
 check('#vwrap #ptz sits in the top-right corner of the video (top and right = --s-4)', /top:var\(--s-4\)/.test(ptzRule) && /right:var\(--s-4\)/.test(ptzRule) && !/translateY/.test(ptzRule));
 check('no style= attribute in the new layout markup', !/\sstyle\s*=/.test(html.replace(/<style>[\s\S]*?<\/style>/g, '')));
 
@@ -167,7 +168,7 @@ check('app bar: the right group holds Theme then Settings', html.indexOf('id="th
 check('app bar: setup.js binds the Settings button to openSetup and nothing else in app.js binds it', /byId\('settingsbtn'\)\.addEventListener\('click', \(\) => openSetup\('settings'\)\)/.test(fs.readFileSync(__dirname + '/../kinora/web/static/setup.js', 'utf8')) && !/settingsbtn/.test(src));
 check('theme: applyTheme paints the Theme button and reads the shared helpers; no #theme radio group left in the menu', /function applyTheme[\s\S]*themebtn[\s\S]*themeIconName/.test(src) && !/\$\('theme'\)/.test(src));
 check('theme: setup.js does not define the theme helpers again (app.js loads first and owns them)', !/function (themeLabel|themeAria|themeIconName|nextTheme)|const (SU_THEME_NAME|THEMES) /.test(fs.readFileSync(__dirname + '/../kinora/web/static/setup.js', 'utf8')));
-check('versions: index.html loads app.js and setup.js with bumped query strings', /app\.js\?v=70"/.test(html) && /setup\.js\?v=18"/.test(html));
+check('versions: index.html loads app.js and setup.js with bumped query strings', /app\.js\?v=71"/.test(html) && /setup\.js\?v=19"/.test(html));
 
 // Behaviour of applyTheme (app.js) on a stub of the Theme button: the three icon SVGs keep their hidden attribute
 // state, the words and the polite status follow the choice. The code is app.js's own source, not a copy.
@@ -194,6 +195,49 @@ check('theme icon: the three icons are one stroke family (no fill, same box) and
   check('theme button: aria-label and title name the choice and the next one', bar.labels['aria-label'] === 'Theme: Auto. Switch to Light' && bar.title === 'Theme: Auto. Switch to Light');
   check('theme status: the page load does not announce, a change does', status.textContent === 'Theme: Auto' && (ctx.applyTheme('light'), status.textContent === 'Theme: Light'));
 })();
+
+// M3 app bar (B4, revised): the camera tabs are back inside the bar as M3 primary tabs (no rail, no #shell); the dropdown is in the bar too
+const appBar = (html.match(/<header class="pb-bar"[\s\S]*?<\/header>/) || [''])[0];
+check('tabs in bar: nav.pb-switch is inside header.pb-bar, between the brand and #addcam, and #chips is its role=tablist', /<div class="pb-brand">[\s\S]*<\/div>\s*<nav class="pb-switch" aria-label="Cameras">[\s\S]*?<div id="chips" role="tablist" aria-label="Cameras"><\/div><\/nav>\s*<button class="pb-btn ghost" id="addcam"/.test(appBar));
+check('tabs in bar: #camsel is in the header, inside nav.pb-switch next to #chips (compact only)', /<nav class="pb-switch" aria-label="Cameras"><button class="pb-camsel" id="camsel"/.test(appBar) && appBar.indexOf('id="camsel"') < appBar.indexOf('id="chips"'));
+check('no rail: no #shell wrapper, no --rail variable, and #cols follows the header directly', !html.includes('id="shell"') && !/--rail|#shell/.test(css) && /<\/header>\s*<div id="cols">/.test(html));
+check('no rail: the bar keeps the HEAD padding-inline that lines it up with #cols (no rail offset)', /\.pb-bar\{[^}]*padding-inline:max\(var\(--gut\),calc\(\(100% - var\(--max\)\)\/2 \+ var\(--gut\)\)\)[;}]/.test(css) && !/padding-inline-start:calc\(var\(--rail\)/.test(css));
+check('shell: the old header edge fades on the camera switcher are gone',!/\.pb-switch::before|\.pb-switch::after/.test(css));
+check('app bar: a 64px bar from 600px (--bar-h) and no 100vw anywhere in the page CSS', /\.pb-bar\{[^}]*height:var\(--bar-h\)/.test(css) && !/100vw/.test(css));
+check('app bar: Add camera is an icon-only plus button with the accessible name Add camera', /<button class="pb-btn ghost" id="addcam" type="button" title="Add a camera" aria-label="Add camera"><svg[^>]*><path d="M12 5v14M5 12h14"\/><\/svg><\/button>/.test(html));
+check('tabs: #chips is one horizontal scrolling row with no scrollbar, the tab fills the bar height with an inset pill state layer, the active label is primary, and the active tab has a 3px primary indicator across its whole width (label and status dot)', /#chips\{display:flex[^}]*overflow-x:auto/.test(css) && !/#chips\{[^}]*flex-direction/.test(css) && /\.pb-tab\{[^}]*height:auto/.test(css) && /\.pb-tab\.on\{box-shadow:inset 0 -3px 0 var\(--md-sys-color-primary\)\}/.test(css));
+check('tabs: the tab templates have no icon (CAM_TAB_ICON is gone); each opens with the .pb-tab-lbl label that holds the name', !/CAM_TAB_ICON/.test(src) && (src.match(/class="pb-tab" role="tab" type="button" data-id="\$\{esc\(c\.id\)\}"(?: aria-disabled="true" title="[^"]*")?><span class="pb-tab-lbl">/g) || []).length === 2);
+check('tabs: the camera name is read from .pb-tab-lbl (not firstChild), so the icon does not change the name', /querySelector\('\.pb-tab-lbl'\)\.textContent/.test(src) && !/firstChild\.textContent/.test(src));
+check('sheet: each camera item has a leading icon, and the list item is built with the glyph only', /class="pb-mi-ico"[^`]*\$\{CAM_GLYPH\}/.test(src) && /\.pb-mi\{[^}]*min-height:40px/.test(css) && /#camlist \.pb-mi\[aria-current="true"\]\{background:var\(--md-sys-color-secondary-container\)/.test(css));
+check('focus: new controls have a 2px primary ring offset 2px', css.includes('.pb-tab:focus-visible{outline:2px solid var(--md-sys-color-primary);outline-offset:2px}') && css.includes('#addcam:focus-visible'));
+check('state layers: hover .08, focus .10, pressed .10 from the M3 state tokens', css.includes('.pb-tab:hover::before{opacity:var(--md-sys-state-hover)}') && css.includes('.pb-theme:focus-visible::before') && css.includes('--md-sys-state-pressed'));
+
+// M3 player controls (B5a): icon-only Add camera; one filled button on the page; segmented selection hooks; state layers on the same ::before pattern
+const addcamTag = (html.match(/<button[^>]*id="addcam"[\s\S]*?<\/button>/) || [''])[0];
+check('B5a add camera: aria-label Add camera, title kept, and no visible text (only the icon)', /aria-label="Add camera"/.test(addcamTag) && /title="Add a camera"/.test(addcamTag) && addcamTag.replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<[^>]+>/g, '').trim() === '');
+const filledIds = [...html.matchAll(/<[^>]*\sclass="[^"]*\bpb-filled\b[^"]*"[^>]*>/g)].map(m => (m[0].match(/\sid="([^"]+)"/) || [])[1]);
+check('B5a filled: .pb-filled is on #exportbtn and on #expgo only (the dialog Export), and nothing else on the page', filledIds.length === 2 && filledIds.includes('exportbtn') && filledIds.includes('expgo') && /<dialog id="exp">[\s\S]*id="expgo"[\s\S]*<\/dialog>/.test(html));
+check('B5a filled: the .pb-filled rule is primary with on-primary text, 40px high and full-round', /\.pb-filled\{[^}]*height:40px[^}]*border-radius:var\(--md-sys-shape-corner-full\)[^}]*background:var\(--md-sys-color-primary\);color:var\(--md-sys-color-on-primary\)/.test(css));
+check('B5a segmented: the selection hooks are kept (.on and aria-checked) and selected = secondary container', css.includes('.pb-seg-btn.on,.pb-seg-btn[aria-checked="true"]{background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container)}'));
+check('B5a segmented: the container is 40px with a 1px outline and a full-round outer edge', /\.pb-seg\{[^}]*height:40px[^}]*border:1px solid var\(--md-sys-color-outline\)[^}]*border-radius:var\(--md-sys-shape-corner-full\)/.test(css));
+check('B5a state layers: the player controls share the ::before layer (hover, focus, pressed)', css.includes('.pb-seg-btn:hover::before') && css.includes('#exportbtn:focus-visible::before') && css.includes('#ptzplist button:active::before') && css.includes('#ptz button:hover::before'));
+check('B5a date row: the date label is a button (text button that opens the picker) and the steppers carry icons, not glyphs', /<button class="d" id="dlabel" type="button">/.test(html) && /<button id="prev"[^>]*><svg/.test(html) && /<button id="next"[^>]*><svg/.test(html));
+check('B5a message: an error uses the error container roles and info the inverse surface', /#msg\.err\{background:var\(--md-sys-color-error-container\);color:var\(--md-sys-color-on-error-container\)/.test(css) && /#msg\{[^}]*background:var\(--md-sys-color-inverse-surface\);color:var\(--md-sys-color-inverse-on-surface\)/.test(css));
+check('B5a export dialog: M3 basic dialog (surface container high, 28px corners, 24px padding) and a 4px linear progress track', /#exp\{[^}]*border-radius:var\(--md-sys-shape-corner-extra-large\)[^}]*background:var\(--md-sys-color-surface-container-high\)[^}]*padding:var\(--s-6\)/.test(css) && /#expbar\{[^}]*height:4px[^}]*background:var\(--md-sys-color-surface-container-highest\)/.test(css));
+check('B5a card: the transport card is surface container low with no border and 12px corners', /\.pb-card\{[^}]*background:var\(--md-sys-color-surface-container-low\);border:0;border-radius:var\(--md-sys-shape-corner-medium\)/.test(css));
+check('B5a presets: the trigger and the menu share the pad\'s dark scrim surface (white text) and the menu items are 48px high', /#vwrap #ptzpbtn\{[^}]*background:rgba\(18,18,18,\.42\);color:var\(--c-on-media\)/.test(css) && /#vwrap #ptzplist\{[^}]*background:rgba\(18,18,18,\.72\)/.test(css) && /#vwrap #ptzplist button\{[^}]*height:48px/.test(css));
+
+// B6 timeline and events panel (M3): the chip check, the row template's ids and classes, state layers, canvas colours from the M3 roles
+const m3css = fs.readFileSync(__dirname + '/../kinora/web/static/m3.css', 'utf8');
+check('B6 chip: the filter chip has no check mark (selection is the secondary-container fill; the type dot is the leading element)', /class="chip"[^>]*><i class="dot"/.test(src) && !/chip-ck/.test(src + css) && /#filters \.chip\.on[^{]*\{[^}]*secondary-container/.test(css));
+check('B6 rows: the event row keeps its classes (ev, evmain, th slot, evtxt, t, k, dot, exbtn) and the thumbnail slot', ['d.className=\'ev\'', 'class="evmain"', 'class="th ${slot}"', 'class="evtxt"', 'class="t"', 'class="k"', 'class="dot"', 'class="exbtn"'].every(x => src.includes(x)));
+check('B6 rows: Export stays a 40px icon button and the row has a state layer, no dividers', /\.exbtn\{[^}]*width:40px;height:40px/.test(css) && /\.ev:hover::before\{opacity:var\(--md-sys-state-hover\)\}/.test(css) && !/\.ev\{[^}]*border-bottom/.test(css));
+check('B6 refresh: #evrefresh is a 40px icon button with the hover, focus and pressed state layers', /#evrefresh\{[^}]*width:40px;height:40px/.test(css) && /#evrefresh:not\(\[aria-disabled="true"\]\):hover::before\{opacity:var\(--md-sys-state-hover\)\}/.test(css) && /#evrefresh:focus-visible::before\{opacity:var\(--md-sys-state-focus\)\}/.test(css));
+check('B6 banners: alert and warn use the error and warn containers, Retry is a text button (no filled fill)', /\.ev-state\.ev-alert\{background:var\(--md-sys-color-error-container\)/.test(css) && /\.ev-state\.ev-warn\{background:var\(--md-sys-color-warn-container\)/.test(css) && /\.ev-state \.pb-btn\{[^}]*background:transparent/.test(css));
+check('B6 skeletons: tonal shimmer, no motion under prefers-reduced-motion', /\.chsk,\.evsk\{background:linear-gradient\(90deg,var\(--md-sys-color-surface-container-highest\)/.test(css) && /prefers-reduced-motion:reduce\)\{\.chsk,\.evsk\{animation:none\}\}/.test(css));
+check('B6 canvas: track, recorded ranges and tick labels read M3 roles that exist in m3.css', ["'--md-sys-color-surface-container-lowest'", "'--md-sys-color-secondary-container'", "'--md-sys-color-on-surface-variant'"].every(x => src.includes('getPropertyValue(' + x + ')')) && ['--md-sys-color-surface-container-highest:', '--md-sys-color-secondary:', '--md-sys-color-on-surface-variant:'].every(x => m3css.includes(x)));
+check('B6 playhead and value label: primary line, inverse-surface tooltip', /#head\{[^}]*background:var\(--md-sys-color-primary\)/.test(css) && /#bubble\{[^}]*background:var\(--md-sys-color-inverse-surface\)/.test(css));
+check('B6 sheet: compact events sheet has 28px top corners and a 32px handle on a surface-container-low panel', /#evpanel\{position:fixed[^}]*background:var\(--md-sys-color-surface-container-low\)[^}]*border-radius:var\(--md-sys-shape-corner-extra-large\) var\(--md-sys-shape-corner-extra-large\) 0 0/.test(css) && /\.ev-peek::before\{[^}]*width:32px/.test(css));
 
 console.log(ok ? 'ALL PASS' : 'SOME FAILED');
 process.exit(ok ? 0 : 1);

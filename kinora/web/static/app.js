@@ -1,5 +1,5 @@
 // Event type -> label/colour/emoji. 2/6/7 are inferred from the cameras' data; adjust if wrong.
-const TYPES={2:{n:'Person',c:'#5B8DEF'},7:{n:'Baby crying',c:'#EE88AA'},6:{n:'Motion / sound',c:'#EBBF62'}};
+const TYPES={2:{n:'Person',c:'#5B8DEF'},7:{n:'Baby crying',c:'#EE88AA'},6:{n:'Motion',c:'#EBBF62'}};
 const T=t=>TYPES[t]||{n:'Event '+t,c:'#8b5cf6'};
 const $=id=>document.getElementById(id), v=$('v'), cv=$('cv'), ctx=cv.getContext('2d');
 const pad=n=>String(n).padStart(2,'0');
@@ -150,7 +150,7 @@ let evLoading=false, loadSeq=0;
 // A list request that gets no answer within 20 s leaves loading and shows the error state (listErr = EV_TIMEOUT).
 const EV_TIMEOUT='timeout'; let evGuard=null;
 function armEventsGuard(){ clearTimeout(evGuard); evGuard=setTimeout(()=>{ if(!evLoading) return; evLoading=false; evRefreshing=false; listErr=EV_TIMEOUT; renderEvents(); draw(); },20000); }
-let cam=null, day=new Date(), dayStart=0, clips=[], events=[], cur=null, camMeta={}, hls=null, liveOn=false;
+let cam=null, day=new Date(), dayStart=0, clips=[], events=[], cur=null, camMeta={}, hls=null, liveOn=false, liveWanted=true;   // liveWanted: Live is the default view, so it shows selected from the first paint until the first load decides
 const hasThumbs=()=>camMeta[cam]?.thumbs!==false||camMeta[cam]?.native_thumbs===true;
 const isStream=()=>!!camMeta[cam]?.stream;   // P2P-only camera: playback is one HLS stream, started at a time
 const ffCam=()=>!!camMeta[cam]?.ff;           // camera that can stream the faster speeds (see ffScaleFor)
@@ -164,19 +164,28 @@ let stBase={kind:'idle'}, stLoad=null, stPoll=null, lastStatus='';
 const ymd=d=>`${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
 const dayLabel=()=>day.toLocaleDateString('en-CA');  // 2026-11-21
 
+// Camera icon (24px glyph) for the compact camera sheet items. Static string only.
+const CAM_GLYPH='<path d="M4 8h3.5l1.5-2.5h6L16.5 8H20a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.2"/>';
 async function init(){
+  // Paint the tabs from the last visit while /api/cameras loads, so the bar does not jump when the list arrives.
+  try{ const c0=JSON.parse(localStorage.getItem('camcache')||'null'), sv=localStorage.getItem('cam');
+    if(Array.isArray(c0)&&c0.length){ const ok0=c=>!!(c.enabled&&c.verified), p0=c0.filter(ok0);
+      $('chips').innerHTML=c0.map(c=>`<button class="pb-tab" role="tab" type="button" data-id="${esc(c.id)}"${ok0(c)?'':' aria-disabled="true"'}><span class="pb-tab-lbl">${esc(c.name)}</span>${ok0(c)?'':'<span class="pb-setup">Set up</span>'}</button>`).join('');
+      cam=(p0.find(c=>c.id===sv)||p0[0]||{}).id||null; markCam(); cam=null; } }catch(e){}
   const cams=await (await fetch('/api/cameras')).json();
   // /api/cameras lists the cameras in the order the owner chose (Settings, Order); that order is used as is.
   // Only a verified and enabled camera may be contacted (listing, live, clips). Others are shown disabled; with none,
   // the setup wizard (static/setup.js) owns the screen and this page does not start playback.
   const okCam=c=>!!(c.enabled&&c.verified);
   // Cameras that are not set up stay in the switcher (aria-disabled, with a "Set up" chip); clicking one opens Settings.
-  $('chips').innerHTML=cams.map(c=>okCam(c)?`<button class="pb-tab" role="tab" type="button" data-id="${esc(c.id)}">${esc(c.name)}</button>`:
-    `<button class="pb-tab" role="tab" type="button" data-id="${esc(c.id)}" aria-disabled="true" title="${c.enabled?'Not set up yet. Click to finish setup.':'Switched off. Click to open Settings.'}">${esc(c.name)}<span class="pb-setup">Set up</span></button>`).join('');
+  const paintTabs=list=>{ $('chips').innerHTML=list.map(c=>okCam(c)?`<button class="pb-tab" role="tab" type="button" data-id="${esc(c.id)}"><span class="pb-tab-lbl">${esc(c.name)}</span></button>`:
+    `<button class="pb-tab" role="tab" type="button" data-id="${esc(c.id)}" aria-disabled="true" title="${c.enabled?'Not set up yet. Click to finish setup.':'Switched off. Click to open Settings.'}"><span class="pb-tab-lbl">${esc(c.name)}</span><span class="pb-setup">Set up</span></button>`).join(''); };
+  paintTabs(cams);
+  try{ localStorage.setItem('camcache',JSON.stringify(cams.map(c=>({id:c.id,name:c.name,enabled:c.enabled,verified:c.verified})))); }catch(e){}
   markCam();
   cams.forEach(c=>camMeta[c.id]=c);
   const pick=cams.filter(okCam);
-  if(!pick.length) return;
+  if(!pick.length){ liveWanted=false; markMode(); applyRate(); return; }
   let saved=null; try{saved=localStorage.getItem('cam')}catch(e){}
   cam=(pick.find(c=>c.id===saved)||pick[0]).id;
   $('chips').onclick=e=>{const b=e.target.closest('[data-id]'); if(!b) return;
@@ -193,7 +202,7 @@ async function init(){
 }
 const markCam=()=>{ const k=[...$('chips').children], si=k.findIndex(b=>b.dataset.id===cam);
   k.forEach((b,i)=>{ const on=b.dataset.id===cam; b.classList.toggle('on',on); b.setAttribute('aria-selected',String(on)); b.tabIndex=rovingTabIndex(si,i); });
-  $('camname').textContent=si>=0?k[si].firstChild.textContent:'Cameras'; };   // narrow screens: the one switcher button names the camera
+  $('camname').textContent=si>=0?k[si].querySelector('.pb-tab-lbl').textContent:'Cameras'; };   // narrow screens: the one switcher button names the camera
 const onToday=()=>ymd(day)===ymd(new Date());
 const dayText=()=>onToday()?'Today':dayLabel();
 
@@ -219,6 +228,7 @@ async function load(opts={}){
   unfreeze(); const wasLive=liveOn; await stopStream(); stopLive(); v.pause(); v.removeAttribute('src'); cur=null; lastSel=null; setMsg('Loading…');
   const isToday=ymd(day)===ymd(new Date());
   const wantLive=(opts.live||wasLive)&&isToday;   // Live is the default view for a camera
+  liveWanted=wantLive; markMode(); applyRate();
   try{
     const recUrl=`/api/recordings?cam=${cam}&date=${ymd(day)}`;
     // Baby Room's SD video can't be played, so its recordings list is not needed (it also needs a camera session slot).
@@ -265,26 +275,16 @@ function anchor(){
   return Math.min(right,Math.max(mid,right-(Date.now()/1000-viewT)*pps));
 }
 const x2t=x=>viewT+(x-ax)/pps, t2x=t=>ax+(t-viewT)*pps;
-let hatchKey='', hatchPat=null;
-// Diagonal hatching in the given colour (half transparent), cached per colour: the "no footage" fill.
-function hatchFill(color){
-  if(hatchKey===color&&hatchPat) return hatchPat;
-  const k=document.createElement('canvas'); k.width=k.height=8; const g=k.getContext('2d');
-  g.strokeStyle=color; g.globalAlpha=.5; g.lineWidth=1.5; g.beginPath();
-  g.moveTo(-2,10); g.lineTo(10,-2); g.moveTo(-2,2); g.lineTo(2,-2); g.moveTo(6,10); g.lineTo(10,6); g.stroke();
-  hatchKey=color; hatchPat=ctx.createPattern(k,'repeat'); return hatchPat;
-}
 function draw(){
-  ax=anchor();
+  $('tlwrap').classList.add('ready'); ax=anchor();
   const cs=getComputedStyle(document.documentElement);
   ctx.clearRect(0,0,W,H);
   ctx.save(); ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(0,TT,W,H-TT,8); else ctx.rect(0,TT,W,H-TT); ctx.clip();   // a rounded strip
-  ctx.fillStyle=cs.getPropertyValue('--track'); ctx.fillRect(0,TT,W,H-TT);
-  const t0=x2t(0), t1=x2t(W);   // marks: hatching where there is NO footage, then the events as tall rounded bars
+  ctx.fillStyle=cs.getPropertyValue('--md-sys-color-surface-container-lowest').trim(); ctx.fillRect(0,TT,W,H-TT);   // track; gaps (no footage) keep this colour
+  const t0=x2t(0), t1=x2t(W);   // marks: recorded ranges in secondary, then the events as tall rounded bars
   if(clips.length){
-    const isToday=ymd(day)===ymd(new Date()), hi=isToday?Math.min(dayStart+86400,Date.now()/1000):dayStart+86400;
-    ctx.fillStyle=hatchFill(cs.getPropertyValue('--rec').trim());
-    for(const g of gapsOf(clips,dayStart,hi,Math.max(10,4/pps))){ if(g.end<t0||g.start>t1) continue; const gx=t2x(g.start); ctx.fillRect(gx,TT,Math.max(1,(g.end-g.start)*pps),H-TT); }
+    ctx.fillStyle=cs.getPropertyValue('--md-sys-color-secondary-container').trim();
+    for(const c of clips){ if(c.end<t0||c.start>t1) continue; const cx=t2x(c.start); ctx.fillRect(cx,TT,Math.max(1,(c.end-c.start)*pps),H-TT); }
   }
   for(const m of mergeEvents(events.filter(e=>e.end>=t0&&e.start<=t1&&shown(e)),6/pps)){
     ctx.fillStyle=T(m.type).c; const ex=t2x(m.start), ew=Math.max(3,(m.end-m.start)*pps);
@@ -292,7 +292,8 @@ function draw(){
   ctx.restore();
   const now=Date.now()/1000;   // "now" marker (today only), 2px in the alert colour
   if(ymd(day)===ymd(new Date())&&now>=t0&&now<=t1){ ctx.fillStyle=cs.getPropertyValue('--c-bad'); ctx.fillRect(t2x(now)-1,TT,2,H-TT); }
-  ctx.fillStyle=cs.getPropertyValue('--mut'); ctx.font='500 12px system-ui'; ctx.textAlign='center';
+  ctx.fillStyle=cs.getPropertyValue('--md-sys-color-on-surface-variant').trim(); ctx.textAlign='center';
+  ctx.font=`500 ${cs.getPropertyValue('--md-sys-typescale-label-small-size').trim()} system-ui`;   // tick labels: label-small
   const step=pps>0.03?3600:pps>0.012?3*3600:6*3600;
   for(let t=Math.ceil(t0/step)*step;t<=t1;t+=step){ const x=t2x(t);
     if(Math.abs(x-ax)>46) ctx.fillText(hh(t),x,16);   // skip a label that would sit under the time bubble
@@ -321,7 +322,7 @@ const url=w=>`/api/clip?cam=${cam}&start=${w.start}&end=${w.end}`;
 let rate=1; try{ rate=+localStorage.getItem('rate')||1; }catch(e){}
 if(![1,2,4,8,16].includes(rate)) rate=1;
 function applyRate(){
-  const lock=liveOn||(streamOn&&!streamFast&&!ffCam());
+  const lock=liveOn||liveWanted||(streamOn&&!streamFast&&!ffCam());
   const shown=lock?1:rate;   // live and streamed (normal) playback are always real-time
   $('speed').classList.toggle('live',lock); $('speed').setAttribute('aria-disabled',String(lock));
   updatePtz();
@@ -492,7 +493,7 @@ window.addEventListener('pagehide',()=>{ if(stream) postJSON('/api/play/stop',{c
 /* ---------- live (RTSP relayed as HLS by the server) ---------- */
 let liveTick=null;
 async function startLive(){
-  await stopStream(); stopLive(); liveOn=true; cur=null; markMode(); setBase({kind:'connecting'}); applyRate(); setMsg('Connecting to live stream…');
+  await stopStream(); stopLive(); liveOn=true; liveWanted=false; cur=null; markMode(); setBase({kind:'connecting'}); applyRate(); setMsg('Connecting to live stream…');
   const src=`/live/${cam}/index.m3u8`;
   const pf=await preflight(src);          // starts the relay and reports why it could not start
   if(!liveOn) return;
@@ -526,10 +527,10 @@ function stopLive(){
 }
 
 // Live/Recorded control: the two segments mirror liveOn (aria-checked, one tab stop, arrows move between them).
-function markMode(){ const l=$('live'), r=$('recbtn');
-  l.classList.toggle('on',liveOn); r.classList.toggle('on',!liveOn);
-  l.setAttribute('aria-checked',String(liveOn)); r.setAttribute('aria-checked',String(!liveOn));
-  l.tabIndex=liveOn?0:-1; r.tabIndex=liveOn?-1:0; paintSound(); }
+function markMode(){ const l=$('live'), r=$('recbtn'), on=liveOn||liveWanted;
+  l.classList.toggle('on',on); r.classList.toggle('on',!on);
+  l.setAttribute('aria-checked',String(on)); r.setAttribute('aria-checked',String(!on));
+  l.tabIndex=on?0:-1; r.tabIndex=on?-1:0; paintSound(); }
 // Tooltip text for a control: data-tip (CSS ::after on hover and focus) and aria-description (screen readers).
 function setTip(el,t){ el.dataset.tip=t; el.setAttribute('aria-description',t); }
 // Speaker button (Live only): aria-pressed = sound on. Live starts muted; the button toggles v.muted.
@@ -652,7 +653,7 @@ function evRow(e){
   const slot=hasThumbs()?thumbSlotClass(it?it.state:'idle'):'th-off';
   d.innerHTML=`<button class="evmain" type="button" tabindex="-1" aria-label="${esc(clockFull(e.start))}, ${esc(ty.n)}">
       <span class="th ${slot}" data-ts="${esc(e.start)}">${shown?`<img class="th-img" alt="" src="${it.url}">`:''}<svg class="th-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3z"/></svg><b>${mmss(e.end-e.start)}</b></span>
-      <span class="evtxt"><span class="t">${esc(clockFull(e.start))}</span><span class="k"><i class="dot" data-type="${esc(e.type)}"></i>${esc(ty.n)}</span></span></button>
+      <span class="evtxt"><span class="t">${esc(clockFull(e.start))}</span><span class="k"><i class="dot" data-type="${esc(e.type)}"></i><span>${esc(ty.n)} · ${mmss(e.end-e.start)}</span></span></span></button>
     <button class="exbtn" type="button" tabindex="-1" aria-label="${esc(exportLabel(e.start))}" title="Export this event"><svg class="pb-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>`;
   d.querySelector('.dot').style.setProperty('background',ty.c);
   d.querySelector('.exbtn').onclick=ev=>{ ev.stopPropagation(); openExport(e.start-5,e.end+5); };
@@ -933,8 +934,9 @@ $('camsel').onclick=()=>{ buildCamSheet(); $('camsheet').showModal(); };
 function buildCamSheet(){ const box=$('camlist'); box.replaceChildren();
   [...$('chips').children].forEach(b=>{
     const m=document.createElement('button'); m.type='button'; m.className='pb-mi';
-    const name=[...b.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('');
-    m.textContent=name+(b.getAttribute('aria-disabled')==='true'?' · Set up':'');
+    const name=b.querySelector('.pb-tab-lbl').textContent;
+    m.innerHTML=`<svg class="pb-mi-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${CAM_GLYPH}</svg>`;
+    m.append(name+(b.getAttribute('aria-disabled')==='true'?' · Set up':''));
     m.dataset.id=b.dataset.id; if(b.dataset.s) m.dataset.s=b.dataset.s;
     m.setAttribute('aria-current',String(b.dataset.id===cam));
     m.onclick=()=>{ $('camsheet').close(); const t=[...$('chips').children].find(c=>c.dataset.id===m.dataset.id); if(t) t.click(); };

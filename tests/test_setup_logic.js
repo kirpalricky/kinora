@@ -219,30 +219,33 @@ F.runAddBatch(rowsA, fakeSend, (i, id) => added.push([i, id])).then(res => {
 
 // Static checks of the page's CSS and markup (no browser here): the fixes that a pattern can prove.
 const html = fs.readFileSync(__dirname + '/../kinora/web/index.html', 'utf8');
+// the page CSS moved to app.css (B3); the colour tokens are the M3 aliases in m3.css
+const css = fs.readFileSync(__dirname + '/../kinora/web/static/app.css', 'utf8');
+const m3css = fs.readFileSync(__dirname + '/../kinora/web/static/m3.css', 'utf8');
 const appjs = fs.readFileSync(__dirname + '/../kinora/web/static/app.js', 'utf8');
-const count = re => (html.match(re) || []).length;
-check('tokens: light track and a quiet recording colour (events carry the contrast)', html.includes('--track:#EEEEF4;--rec:#9FA1B8'));
-check('tokens: dark timeline uses the surface and a quiet recording colour, in both dark blocks', count(/--track:var\(--c-surface-2\);--rec:#5C5F75/g) === 2);
-check('tokens: dark strong line and secondary text, in both dark blocks', count(/--c-line-strong:#6B6F86/g) === 2 && count(/--c-text-3:#8D90A2/g) === 2);
-check('tokens: light strong line and text tokens (cool neutrals)', html.includes('--c-line-strong:#8B8CA0') && html.includes('--c-text-2:#565869') && html.includes('--c-text-3:#666879'));
-check('timeline: rounded strip, hatched no-footage gaps and merged event ranges', /roundRect\(0,TT,W,H-TT,8\)/.test(appjs) && /mergeEvents\(events\.filter/.test(appjs) && /gapsOf\(clips,dayStart/.test(appjs));
-check('specificity: the field rule is :where() (0,0,0 extra), so the number, invalid, hover and focus rules win', html.includes('#setup :where(input:not([type=radio],[type=checkbox]),select){')
-  && !html.includes('#setup input:not([type=radio]):not([type=checkbox]),#setup select{width'));
-check('specificity: the number row keeps its width and does not grow', html.includes('.su-tog-r .su-num-in{flex:none}'));
-check('switch: a 44px hit area around the 36x20 switch (inset -12px -4px), thumb is --c-on-accent', /\.su-switch\{position:relative;/.test(html)
-  && html.includes('.su-switch::before{content:"";position:absolute;inset:-12px -4px}') && html.includes('background:var(--c-on-accent);transition:transform'));
-check('dialog: a darker backdrop in both themes', html.includes('.su-dlg::backdrop{background:rgba(0,0,0,.45)}'));
-check('toast: has a 1px strong border', /\.su-toast\{[^}]*border:1px solid var\(--c-line-strong\)/.test(html));
-check('toast: lifts the bottom offset only for the phone wizard footer', !/\n\s*\.su-toast\{bottom:96px\}/.test(html) && html.includes('#setup:has(#setupfoot:not(:empty)) .su-toast{bottom:96px}'));
-check('selection: selected segments and sidebar rows have the agreed states', html.includes('.pb-seg-btn.on,.pb-seg-btn[aria-checked="true"]{background:var(--c-surface);border:1px solid var(--c-line-strong)')
-  && html.includes('.su-seg-btn[aria-pressed="true"],.su-seg-btn[aria-checked="true"]{background:var(--c-surface);border:1px solid var(--c-line-strong)')
-  && html.includes('.su-row[aria-current="page"]{background:var(--c-accent-soft);color:var(--c-accent-text);font-weight:600;box-shadow:inset 3px 0 0 var(--c-accent)}')
-  && html.includes('--c-accent-soft:#E8E8F8'));
-check('events header: the desktop card header is the surface colour', /#evhead\{position:sticky;top:0;z-index:2;background:var\(--c-surface\)/.test(html));
-check('footer: the wizard footer has rounded bottom corners, square on phones', html.includes('border-radius:0 0 calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px)}') && /#setupfoot\{[^}]*border-radius:0\}/.test(html));
+const count = re => (m3css.match(re) || []).length;
+check('tokens: light track and a quiet recording colour (events carry the contrast)', m3css.includes('--track:var(--md-sys-color-surface-container-high);') && m3css.includes('--rec:var(--md-sys-color-outline);'));
+check('tokens: dark timeline uses the surface and a quiet recording colour, in both dark blocks', count(/--track:var\(--md-sys-color-surface-container-high\);/g) === 1 && count(/--rec:var\(--md-sys-color-outline\);/g) === 1);
+check('tokens: dark strong line and secondary text, in both dark blocks', count(/--c-line-strong:var\(--md-sys-color-outline\);/g) === 1 && count(/--c-text-3:var\(--md-sys-color-on-surface-variant\);/g) === 1);
+check('tokens: light strong line and text tokens (cool neutrals)', m3css.includes('--c-line-strong:var(--md-sys-color-outline);') && m3css.includes('--c-text-2:var(--md-sys-color-on-surface-variant);') && m3css.includes('--c-text-3:var(--md-sys-color-on-surface-variant);'));
+check('timeline: rounded strip, recorded ranges in secondary (gaps keep the track) and merged event ranges', /roundRect\(0,TT,W,H-TT,8\)/.test(appjs) && /mergeEvents\(events\.filter/.test(appjs) && /getPropertyValue\('--md-sys-color-secondary-container'\)/.test(appjs) && /for\(const c of clips\)/.test(appjs));
+check('specificity: the field rule is :where() (0,0,0 extra), so the number, invalid, hover and focus rules win', css.includes('#setup :where(input:not([type=radio],[type=checkbox]),select){')
+  && !css.includes('#setup input:not([type=radio]):not([type=checkbox]),#setup select{width'));
+check('specificity: the number row keeps its width and does not grow', css.includes('.su-tog-r .su-num-in{flex:none}'));
+check('switch (B7): M3 52x32 track with a 16px thumb off and 24px on, hit area 60x48 (inset -8px -4px), on = primary and on-primary', /\.su-switch\{position:relative;[^}]*width:52px;height:32px/.test(css)
+  && css.includes('.su-switch::before{content:"";position:absolute;inset:-8px -4px}') && css.includes('.su-switch[aria-checked="true"]::after{top:2px;left:22px;width:24px;height:24px;background:var(--md-sys-color-on-primary)}'));
+check('dialog (B7): the scrim role at 32% behind a surface-container-high dialog', css.includes('.su-dlg::backdrop{background:color-mix(in srgb,var(--md-sys-color-scrim) 32%,transparent)}') && /\.su-dlg\{[^}]*surface-container-high/.test(css));
+check('toast (B7): a snackbar on inverse-surface, no border', /\.su-toast\{[^}]*border:0[^}]*inverse-surface/.test(css));
+check('toast: lifts the bottom offset only for the phone wizard footer', !/\n\s*\.su-toast\{bottom:96px\}/.test(css) && css.includes('#setup:has(#setupfoot:not(:empty)) .su-toast{bottom:96px}'));
+check('selection (B7): selected segments and navigation items are secondary-container', css.includes('.pb-seg-btn.on,.pb-seg-btn[aria-checked="true"]{background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container)')
+  && css.includes('.su-seg-btn[aria-pressed="true"],.su-seg-btn[aria-checked="true"]{background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container)}')
+  && css.includes('.su-row[aria-current="page"]{background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container);font-weight:600}')
+  && m3css.includes('--c-accent-soft:var(--md-sys-color-primary-container);'));
+check('events header: the sticky header matches the surface-container-low panel', /#evhead\{position:sticky;top:0;z-index:2;background:var\(--md-sys-color-surface-container-low\)/.test(css));
+check('footer (B7): the wizard footer follows the 28px card corners, square on phones', css.includes('border-radius:0 0 var(--md-sys-shape-corner-extra-large) var(--md-sys-shape-corner-extra-large)}') && /#setupfoot\{[^}]*border-radius:0[^}]*\}/.test(css));
 check('css: the setup block uses no hard-coded colour (the dialog backdrop is the one given value)', (() => {
-  const a = html.indexOf('/* setup wizard and Settings'), b = html.indexOf('/* transport: the right group');
-  const block = html.slice(a, b).replace('rgba(0,0,0,.45)', '');
+  const a = css.indexOf('/* setup wizard and Settings'), b = css.indexOf('/* transport: the right group');
+  const block = css.slice(a, b).replace('rgba(0,0,0,.45)', '');
   return a > 0 && b > a && !/#[0-9a-fA-F]{3,8}\b|rgba?\(/.test(block);
 })());
 const setupjs = fs.readFileSync(__dirname + '/../kinora/web/static/setup.js', 'utf8');
@@ -264,12 +267,12 @@ check('devices: the sidebar row for Other devices has no subtitle line', /row\('
 check('devices: Add a device is a button until pressed; Cancel and Escape end the edit and drop the draft', setupjs.includes("class: 'su-btn ghost', 'data-focus': 'dev-open', onclick: openDeviceForm}, icon('plus', 'su-btn-ico'), 'Add a device'")
   && setupjs.includes("SU.edit !== 'device-add'") && setupjs.includes("btn('Cancel', endEdit, 'ghost'") && /if \(was === 'device-add'\) SU\.devForm = \{ip: '', name: ''\}/.test(setupjs));
 check('devices: a successful add collapses the form and returns focus to its button', /SU\.devForm = \{ip: '', name: ''\}; SU\.edit = ''; SU\.opener = '';[\s\S]{0,160}dev-open/.test(setupjs));
-check('address row: the address is nowrap on its own line, the buttons wrap under it; IPs in cred values never break', html.includes('.su-cred-v .su-mono{white-space:nowrap}') && html.includes('.su-cred.su-cred-addr{display:flex;flex-wrap:wrap') && html.includes('.su-cred-addr>.su-cred-v{flex:1 1 auto;min-width:0;max-width:100%;overflow-x:auto;overflow-wrap:normal;white-space:nowrap}') && setupjs.includes("], 'su-cred-addr')"));
-check('add a device: a ghost button with the plus icon, not a link', html.includes('.su-btn-ico{width:18px;height:18px;flex:none}'));
+check('address row: the address is nowrap on its own line, the buttons wrap under it; IPs in cred values never break', css.includes('.su-cred-v .su-mono{white-space:nowrap}') && css.includes('.su-cred.su-cred-addr{display:flex;flex-wrap:wrap') && css.includes('.su-cred-addr>.su-cred-v{flex:1 1 auto;min-width:0;max-width:100%;overflow-x:auto;overflow-wrap:normal;white-space:nowrap}') && setupjs.includes("], 'su-cred-addr')"));
+check('add a device: a ghost button with the plus icon, not a link', css.includes('.su-btn-ico{width:18px;height:18px;flex:none}'));
 check('qr: the QR button opens one dialog; no disclosure, no toggle state, no leftover QR rules', setupjs.includes("'aria-label': 'Show QR code', title: 'Show QR code',")
   && setupjs.includes("'data-focus': 'qr-open'") && setupjs.includes("dlg.dataset.qr = address;") && setupjs.includes("h('h2', {class: 'su-dlg-t', id: 'suconfirmt', text: 'Open on your phone'")
   && !/SU\.qr|qrDisclosure|toggleQr|qrPanel|su-more-d.*qr|qr-toggle|su-qr-tile|su-qr-text|su-qr-do/.test(setupjs)
-  && !/\.su-card-s>\.su-more-d|\.su-qr-text|\.su-qr-do|\.su-qr\{/.test(html));
+  && !/\.su-card-s>\.su-more-d|\.su-qr-text|\.su-qr-do|\.su-qr\{/.test(css));
 check('qr: the closing rule: a stale code closes on the refresh, and a changed list waits while the code is open', setupjs.includes('function closeQrIfStale()')
   && setupjs.includes('closeQrIfStale();') && /if \(!SU\.devDirty \|\| !devicesVisible\(\) \|\| typingNow\(\) \|\| qrOpen\(\)\) return;/.test(setupjs));
 check('icon: a qr glyph exists in the same stroke table', /\n  qr: \[\['rect'/.test(setupjs));
