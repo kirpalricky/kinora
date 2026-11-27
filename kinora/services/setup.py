@@ -24,17 +24,19 @@ DEFAULT_USER = "rtspadmin"
 PORTS = (443, 554, 8800)                  # login-free TCP connects only (health._tcp)
 RFC1918 = tuple(ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
 MODELS = {   # model presets: flags only (the sign-in method is automatic). `auth` is what a manual PATCH model names
-    "C100": {"auth": "admin_cloud", "p2p": True, "stream_playback": True, "thumbs": False, "win": 30,
-             "fast_forward": True,
-             # EXPERIMENT (docs/OPERATIONS.md, 'Native thumbnails'): ask the camera for its own thumbnail over P2P. Remove if the camera says unsupported.
-             "native_thumbs": True},
+    # thumbnails: a 3 s P2P clip + ffmpeg still, one P2P session each, lazy and cached; the camera ignores
+    # its native thumbnail requests (docs/OPERATIONS.md, 'Native thumbnails').
+    # thumbs_beside_live False: a thumbnail never takes one of the baby monitor's ~2 stream slots while Live is open
+    "C100": {"auth": "admin_cloud", "p2p": True, "stream_playback": True, "thumbs": True, "win": 30,
+             "fast_forward": True, "thumbs_beside_live": False},
     "C200": {"auth": "cam_cloud", "ptz": True, "fast_forward": True},
     "C210": {"auth": "admin_cloud", "ptz": True, "fast_forward": True},
     "other": {},
 }
 EDITABLE_FLAGS = ("ptz", "win", "thumbs", "ptz_invert", "ptz_step_deg", "fast_forward")
 READONLY_FLAGS = ("p2p", "stream_playback")
-PRESET_FLAGS = ("ptz", "win", "thumbs", "fast_forward", "p2p", "stream_playback", "ptz_invert", "ptz_step_deg", "native_thumbs")
+PRESET_FLAGS = ("ptz", "win", "thumbs", "fast_forward", "p2p", "stream_playback", "ptz_invert", "ptz_step_deg", "native_thumbs",
+                "thumbs_beside_live")
 PUBLIC_KEYS = ("id", "name", "ip", "auth", "model", "model_note", "device_id", "enabled", "verified", "model_seen",
                "fw_seen")
 UNKNOWN_NOTE = "Unknown model: using standard settings"

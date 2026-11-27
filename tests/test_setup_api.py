@@ -1112,6 +1112,13 @@ class ModelPreset(SetupCase):
         self.assertNotIn("p2p", cam)
         self.assertFalse(body["auth_differs_from_preset"])     # other has no preset auth
 
+    async def test_c100_preset_turns_thumbs_beside_live_off_and_c200_leaves_it_to_the_default(self):
+        self.assertIs(setup_api.MODELS["C100"]["thumbs_beside_live"], False)
+        cid = await self.c100_reporting_c200()                     # applies the C100 preset
+        self.assertIs(config.CAMS[cid]["thumbs_beside_live"], False)
+        await self.ok("PATCH", f"/api/cameras/{cid}", {"model": "C200", "apply_preset": True})
+        self.assertNotIn("thumbs_beside_live", config.CAMS[cid])   # removed: the default (True) applies
+
     async def test_model_without_apply_only_records_the_model(self):
         cid = await self.c100_reporting_c200()
         before = copy.deepcopy(config.CAMS[cid])
@@ -1271,7 +1278,8 @@ class DetectedModel(SetupCase):
         cam = config.CAMS[cid]
         self.assertEqual(cam["model"], "C100")
         self.assertEqual({k: cam[k] for k in ("p2p", "stream_playback", "thumbs", "win", "fast_forward")},
-                         {"p2p": True, "stream_playback": True, "thumbs": False, "win": 30, "fast_forward": True})
+                         {"p2p": True, "stream_playback": True, "thumbs": True, "win": 30, "fast_forward": True})
+        self.assertFalse(cam.get("native_thumbs"))
         self.assertNotIn("ptz", cam)
         self.assertNotIn("model_note", cam)
         self.assertEqual((cam["enabled"], cam["verified"]), (True, True))

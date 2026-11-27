@@ -33,7 +33,7 @@ def resolve_home():
 
 HOME = resolve_home()
 PORT = int(env("PORT", "8080"))
-VERSION = "0.3.1"   # shown in Settings > About; bump with each release
+VERSION = "0.3.2"   # shown in Settings > About; bump with each release
 CACHE = HOME / "cache"
 META = CACHE / "meta"
 EXPORTS = HOME / "exports"
@@ -99,6 +99,10 @@ def check_camera(c, where="cameras.json"):
     if "device_id" in c and (not isinstance(c["device_id"], str) or not c["device_id"].strip()):
         raise ValueError(f"{where}: device_id of camera {cid!r} must be a non-empty string "
                          f"(got {c['device_id']!r})")
+    if "thumb_seg" in c and (type(c["thumb_seg"]) is not int or not 1 <= c["thumb_seg"] <= 3):
+        raise ValueError(f"{where}: thumb_seg of camera {cid!r} must be an integer from 1 to 3 (got {c['thumb_seg']!r})")
+    if "thumb_fast" in c and type(c["thumb_fast"]) is not bool:
+        raise ValueError(f"{where}: thumb_fast of camera {cid!r} must be true or false (got {c['thumb_fast']!r})")
 
 
 def check_cameras(cams, where="cameras.json"):

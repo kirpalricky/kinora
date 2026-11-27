@@ -68,6 +68,6 @@ No build step. `index.html` (markup, CSS, export dialog, setup container) loads 
 | `stream_playback` | HLS playback; exposed as `stream` | `services/play.py`, `server.require_stream` |
 | `fast_forward` | allows key-frame scales; exposed as `ff` | `server.require_stream` |
 | `thumbs` | `false` -> `/api/thumb` returns 404 (unless `native_thumbs` and `p2p`) | `server.thumb`, `app.js` |
-| `native_thumbs` | experiment, P2P cameras only (C100 preset): `/api/thumb` asks the camera for its own thumbnail (`p2p_media.fetch_thumbnail`); first refusal is remembered per process (`server._native_unsupported`) | `server._native_thumb`, `app.js` `hasThumbs` |
+| `native_thumbs` | experiment, P2P cameras only (opt-in, off in the C100 preset): `/api/thumb` asks the camera for its own thumbnail (`p2p_media.fetch_thumbnail`); first refusal is remembered per process (`server._native_unsupported`) | `server._native_thumb`, `app.js` `hasThumbs` |
 | `win` | clip piece length in seconds (client only) | `app.js` |
 | `ptz_step_deg`, `ptz_invert` | optional PTZ tuning (defaults 10 and off) | `services/ptz.py` |
