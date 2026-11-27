@@ -126,6 +126,7 @@ const q = [{ts: 1, due: 500}, {ts: 2, due: 0}, {ts: 3, due: 0}];
 check('pick: first due item in list order, -1 when none is due', F.thumbPick(q, 100) === 1 && F.thumbPick([{due: 900}], 100) === -1 && F.thumbPick([], 100) === -1);
 check('wake: 0 when something is due, ms to the earliest retry otherwise, null when empty', F.thumbWakeMs(q, 100) === 0 && F.thumbWakeMs([{due: 900}, {due: 400}], 100) === 300 && F.thumbWakeMs([], 100) === null);
 check('queue runs beside Live and stops only when nothing is queued', F.thumbMayRun(true, 5) === true && F.thumbMayRun(false, 5) === true && F.thumbMayRun(false, 0) === false);
+check('queue pauses while Live is open only for a camera that cannot serve thumbnails beside Live (beside false)', F.thumbMayRun(true, 5, false) === false && F.thumbMayRun(false, 5, false) === true && F.thumbMayRun(true, 0, true) === false);
 
 // Placeholders: same box in every state; the picture only when shown; no state shows text
 check('slot classes: show, off, failed, everything else is the quiet wait placeholder', F.thumbSlotClass('show') === 'th-ok' && F.thumbSlotClass('off') === 'th-off' && F.thumbSlotClass('failed') === 'th-fail' && ['idle', 'queued', 'gaveup'].every(s => F.thumbSlotClass(s) === 'th-wait') && F.thumbSlotClass('flight') === 'th-load');

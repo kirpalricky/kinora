@@ -256,6 +256,27 @@ class P2PFetchBase(ThumbBase):
         return mock.patch.object(server.asyncio, "create_subprocess_exec", run)
 
 
+class CamerasTbl(unittest.TestCase):
+    """GET /api/cameras carries tbl: thumbnails may run beside Live (true unless thumbs_beside_live is false)."""
+    def tbl_of(self, **change):
+        cid = next(iter(server.CAMS))
+        cam = dict(server.CAMS[cid])
+        cam.pop("thumbs_beside_live", None)
+        cam.update(change)
+        with mock.patch.dict(server.CAMS, {cid: cam}, clear=True):
+            resp = asyncio.run(server.cameras(None))
+        return {c["id"]: c for c in json.loads(resp.text)}[cid]["tbl"]
+
+    def test_tbl_is_true_by_default(self):
+        self.assertIs(self.tbl_of(), True)
+
+    def test_tbl_is_false_when_thumbs_beside_live_is_false(self):
+        self.assertIs(self.tbl_of(thumbs_beside_live=False), False)
+
+    def test_tbl_is_true_when_thumbs_beside_live_is_true(self):
+        self.assertIs(self.tbl_of(thumbs_beside_live=True), True)
+
+
 class ThumbFailuresNeverPause(P2PFetchBase):
     """A failed thumbnail window is memoised, but it never counts towards the camera's 30 min download pause."""
     def test_failed_thumbs_leave_the_pause_counter_and_block_alone_and_the_window_is_memoised(self):
@@ -399,6 +420,28 @@ class SingleStill(P2PFetchBase):
         self.assertEqual(status, 200)
         self.assertEqual(seen, [(f"thumb_{self.cid}_{TS}.part.ts", True)])
         self.assertEqual(list(self.cache.glob("thumb_*")), [])
+
+    def test_fast_single_path_ffmpeg_command_has_an_before_the_output_file(self):
+        async def record(call, t, cam, start, end, out_path, **kw):
+            Path(out_path).write_bytes(b"video")
+        calls = []
+
+        async def ffmpeg(*args, **kw):
+            calls.append(args)
+            Path(args[-1]).write_bytes(b"\xff\xd8x")
+            proc = mock.Mock()
+            proc.wait = mock.AsyncMock(return_value=0)
+            return proc
+        with mock.patch.object(server.p2p_media, "fetch_window", record), \
+             mock.patch.object(server.asyncio, "create_subprocess_exec", ffmpeg):
+            status, _, _ = asyncio.run(get_thumb(self.cid, TS))
+        self.assertEqual(status, 200)
+        self.assertEqual(len(calls), 1)
+        args = calls[0]
+        self.assertIn("-an", args)
+        self.assertLess(args.index("-an"), len(args) - 1)
+        self.assertTrue(args[-1].endswith(f"{self.cid}_{TS}.jpg"))
+        self.assertEqual(args[args.index("-frames:v") + 1], "1")
 
     def test_thumb_fast_false_downloads_the_mp4_clip_with_still_off(self):
         seen = []

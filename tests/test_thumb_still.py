@@ -184,6 +184,32 @@ class LogText(unittest.TestCase):
                          "1[ end=silent other=0 chunks=- bytes=- len=- exact=- since_first=-]")
 
 
+class StillNoAudio(unittest.TestCase):
+    """Both thumbnail ffmpeg commands are video only (-an): the raw MPEG-TS holds audio that ffmpeg would decode and complain about."""
+    def capture(self, coro_factory):
+        calls = []
+
+        async def record(*args, **kw):
+            calls.append(args)
+            Path(args[-1]).write_bytes(b"\xff\xd8x")
+            proc = mock.Mock()
+            proc.wait = mock.AsyncMock(return_value=0)
+            return proc
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(server.asyncio, "create_subprocess_exec", record):
+            asyncio.run(coro_factory(Path(d)))
+        return calls
+
+    def test_batch_still_command_has_an_before_the_output_file(self):
+        calls = self.capture(lambda d: server._still(d / "a.ts", d / "a.jpg"))
+        self.assertEqual(len(calls), 1)
+        args = calls[0]
+        self.assertIn("-an", args)
+        self.assertLess(args.index("-an"), len(args) - 1)
+        self.assertEqual(args[-1].rsplit("/", 1)[-1], "a.jpg")
+        self.assertEqual(args[args.index("-frames:v") + 1], "1")
+        self.assertEqual(args[args.index("-vf") + 1], "scale=320:-2")
+
+
 class Flag(unittest.TestCase):
     def cam(self, **extra):
         c = {"id": "cam_fast", "name": "Fast test", "auth": config.AUTH_METHODS[0], "ip": "10.20.30.40"}

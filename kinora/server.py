@@ -89,7 +89,7 @@ async def cameras(request):
     # disabled cameras are listed too (the page shows them); enabled:false means the session layer refuses to log in
     return web.json_response([{"id": c["id"], "name": c["name"], "enabled": c["enabled"], "verified": bool(c.get("verified")),
                                "thumbs": c.get("thumbs", True), "native_thumbs": bool(c.get("native_thumbs")), "win": c.get("win"), "stream": bool(c.get("stream_playback")), "ff": bool(c.get("fast_forward")),
-                               "ptz": bool(c.get("ptz"))} for c in CAMS.values()])
+                               "ptz": bool(c.get("ptz")), "tbl": c.get("thumbs_beside_live", True) is not False} for c in CAMS.values()])
 
 
 async def status(request):
@@ -431,7 +431,7 @@ def _batch_starts(cam, ts):
 async def _still(mp4, jpg):
     """One ffmpeg still (320 px wide) of a thumbnail clip: the command of the single thumbnail path."""
     proc = await asyncio.create_subprocess_exec(
-        ffmpeg_path(), "-v", "error", "-y", "-i", str(mp4), "-frames:v", "1", "-vf", "scale=320:-2", str(jpg))
+        ffmpeg_path(), "-v", "error", "-y", "-i", str(mp4), "-frames:v", "1", "-vf", "scale=320:-2", "-an", str(jpg))
     await proc.wait()
 
 
@@ -602,7 +602,7 @@ async def thumb(request):
                 _thumb_p2p_end[cam["id"]] = time.monotonic()
             proc = await asyncio.create_subprocess_exec(
                 ffmpeg_path(), "-v", "error", "-y", "-i", str(CACHE / tmp), "-frames:v", "1",
-                "-vf", "scale=320:-2", str(jpg))
+                "-vf", "scale=320:-2", "-an", str(jpg))
             await proc.wait()
             if still and not jpg.exists():   # the stream held no decodable frame: memoised only (never counted)
                 print(f"[thumb {cam['id']} {ts}] failed: NoFrame (stage: still)", file=sys.stderr, flush=True)

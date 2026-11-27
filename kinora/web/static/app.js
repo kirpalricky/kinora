@@ -116,8 +116,8 @@ function mergeEvents(list,gapS){
 function thumbPick(items,now){ return items.findIndex(i=>i.due<=now); }
 // Milliseconds until the first queued thumbnail is due (0 = now), or null when nothing is queued.
 function thumbWakeMs(items,now){ return items.length?Math.max(0,Math.min(...items.map(i=>i.due))-now):null; }
-// The queue runs whenever something waits (thumbnails load beside Live; the server refuses with 202 if the camera cannot).
-function thumbMayRun(liveOn,queued){ return queued>0; }   // Live no longer pauses thumbnails; a busy camera answers 202 and the loader backs off
+// The queue runs whenever something waits, except while Live is open on a camera that cannot serve thumbnails beside Live (tbl false).
+function thumbMayRun(liveOn,queued,beside=true){ return queued>0 && (!liveOn||beside!==false); }   // Live pauses thumbnails only for a camera that cannot serve them beside Live (tbl false); the others answer 202 when busy
 // CSS state class of an event's thumbnail slot. The same size in every state; no text, so the list never jumps.
 function thumbSlotClass(state){ return state==='show'?'th-ok':state==='off'?'th-off':state==='failed'?'th-fail':state==='flight'?'th-load':'th-wait'; }
 // Theme choice: the cycle Auto -> Light -> Dark -> Auto and the words for the app bar's Theme button. Loaded by app.js
@@ -622,7 +622,7 @@ function thumbPump(){
   clearTimeout(TH.timer); TH.timer=null;
   if(TH.inflight) return;
   const list=[...TH.items.values()].filter(it=>it.vis&&it.state==='queued');
-  if(!thumbMayRun(liveOn,list.length)) return;
+  if(!thumbMayRun(liveOn,list.length,camMeta[cam]?.tbl!==false)) return;
   const now=Date.now(), i=thumbPick(list,now);
   if(i<0){ TH.timer=setTimeout(thumbPump,thumbWakeMs(list,now)); return; }
   thumbFetch(list[i]);
