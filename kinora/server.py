@@ -749,7 +749,7 @@ async def local_only(request, handler):
     return resp
 
 
-STATIC_FILES = {"hls.min.js", "app.js", "setup.js"}
+STATIC_FILES = {"hls.min.js", "app.js", "setup.js", "m3.css", "app.css"}
 
 
 async def static_file(request):

@@ -23,7 +23,7 @@ WHEEL="$(ls "$TMP"/dist/*.whl | head -1)"
 import sys, zipfile
 names = zipfile.ZipFile(sys.argv[1]).namelist()
 need = ["kinora/web/index.html", "kinora/web/static/app.js", "kinora/web/static/hls.min.js",
-        "kinora/web/static/setup.js", "kinora/cli.py"]
+        "kinora/web/static/setup.js", "kinora/web/static/m3.css", "kinora/web/static/app.css", "kinora/cli.py"]
 missing = [n for n in need if n not in names]
 if missing:
     sys.exit("missing from wheel: " + ", ".join(missing))
@@ -67,11 +67,11 @@ assert r.status == 200, r.status
 open(out, "wb").write(r.read())
 PYEOF
 }
-for p in / /static/app.js /static/hls.min.js /static/setup.js /api/setup/state; do
+for p in / /static/app.js /static/hls.min.js /static/setup.js /static/m3.css /static/app.css /api/setup/state; do
   get "$p" || fail "GET $p"
   echo "200 $p"
   if [ "$p" = "/" ]; then
-    grep -q '/static/app.js' "$TMP/body" && grep -q '/static/hls.min.js' "$TMP/body" || fail "index.html does not reference the assets"
+    grep -q '/static/app.js' "$TMP/body" && grep -q '/static/hls.min.js' "$TMP/body" && grep -q '/static/app.css' "$TMP/body" || fail "index.html does not reference the assets"
   fi
 done
 echo "PACKAGE SMOKE PASS"

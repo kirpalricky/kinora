@@ -1,0 +1,746 @@
+/* Design tokens (the design notes, section 3). The timeline's old names below alias the new tokens. */
+:root{color-scheme:light dark;
+  --c-shim:rgba(255,255,255,.6);
+  --c-on-media:#FFFFFF;   /* text over the video (not theme-dependent) */
+  --c-qr:#FFFFFF;   /* the white tile of the QR code (Settings > Other devices): white in both themes so it scans */
+  --bg:var(--c-bg);--fg:var(--c-text);--mut:var(--c-text-2);--accent:var(--c-accent);--sel:var(--c-accent);
+  --card:var(--c-surface-2);--line:var(--c-line);
+  --err:var(--c-bad);
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --s-1:4px;--s-2:8px;--s-3:12px;--s-4:16px;--s-5:20px;--s-6:24px;--s-7:32px;--s-8:40px;--s-9:56px;
+  --r-sm:6px;--r-md:10px;--r-lg:16px;--r-pill:999px;
+  --e-1:0 1px 2px rgba(24,22,18,.05),0 4px 16px rgba(24,22,18,.06);
+  --t-fast:120ms;--t-base:200ms;--ease:cubic-bezier(.2,0,0,1)}
+/* Player spacing and layout (the design notes): gutters, top padding, app bar height, content width, events column, chrome height */
+:root{--gut:16px;--pt:var(--s-3);--bar-h:56px;--max:1760px;--side:clamp(320px,26vw,440px);--chrome:336px}
+@media(min-width:600px){:root{--gut:var(--s-6);--pt:var(--s-4);--bar-h:64px}}
+@media(min-width:960px){:root{--gut:var(--s-7);--pt:var(--s-6)}}
+@media(min-width:960px) and (max-width:1279px){:root{--chrome:384px}}
+/* Theme: follows the system unless the user picked one (data-theme on <html>: light | dark) */
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--c-shim:rgba(255,255,255,.07);
+  --e-1:none}}
+:root[data-theme="dark"]{color-scheme:dark;--c-shim:rgba(255,255,255,.07);
+  --e-1:none}
+:root[data-theme="light"]{color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:var(--c-bg);color:var(--c-text);font:15px/22px var(--font)}
+#app{max-width:none;margin:auto;min-height:100vh}
+/* focus ring on every control of the player (and the export dialog) */
+#app :focus-visible,dialog :focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}
+/* the content column: gutters and top/bottom padding from the root variables; main adds no padding of its own */
+#cols{width:100%;max-width:var(--max);margin-inline:auto;padding:var(--pt) var(--gut)}
+main{padding:0}
+#vwrap{position:relative;background:#000;aspect-ratio:16/9;border-radius:var(--r-lg);overflow:hidden}
+video{width:100%;height:100%;display:block;background:#000;object-fit:contain}
+/* overlay message: an inverse-surface snackbar (4px corners) centred on the video, as the full-cover layer was */
+#msg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:max-content;max-width:calc(100% - 2*var(--s-4));padding:var(--s-2) var(--s-4);
+  border-radius:var(--md-sys-shape-corner-extra-small);background:var(--md-sys-color-inverse-surface);color:var(--md-sys-color-inverse-on-surface);
+  font-size:var(--md-sys-typescale-body-medium-size);line-height:var(--md-sys-typescale-body-medium-line-height);text-align:center;pointer-events:none}
+#msg:empty{display:none}
+#msg.err{background:var(--md-sys-color-error-container);color:var(--md-sys-color-on-error-container);font-weight:600}
+#freeze{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;display:none;pointer-events:none}
+
+/* app bar (M3 small top app bar, --bar-h: 56px compact, 64px from 600px): app mark and title, camera tabs (600px and up) or the camera dropdown (compact), Add camera, Theme and Settings.
+   Sticky. From 600px the camera tabs sit in the bar (M3 primary tabs on its bottom edge). */
+.pb-bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:var(--s-3);height:var(--bar-h);padding-inline:max(var(--gut),calc((100% - var(--max))/2 + var(--gut)));background:var(--md-sys-color-surface);box-shadow:inset 0 -1px 0 var(--md-sys-color-outline-variant)}
+.pb-brand{display:flex;align-items:center;gap:var(--s-3);flex:none}
+.pb-mark{width:28px;height:28px;display:block;flex:none}
+.pb-mk-b{fill:none;stroke:var(--c-text-3);stroke-width:1.75}
+.pb-mk-f{fill:var(--c-accent);stroke:none}
+.pb-name{font-size:var(--md-sys-typescale-title-medium-size);line-height:var(--md-sys-typescale-title-medium-line-height);font-weight:var(--md-sys-typescale-title-medium-weight);letter-spacing:var(--md-sys-typescale-title-medium-tracking);color:var(--md-sys-color-on-surface);white-space:nowrap}
+@media(min-width:600px){.pb-name{font-size:var(--md-sys-typescale-title-large-size);line-height:var(--md-sys-typescale-title-large-line-height);font-weight:var(--md-sys-typescale-title-large-weight);letter-spacing:var(--md-sys-typescale-title-large-tracking)}}
+/* camera tabs (600px and up): M3 primary tabs in the app bar. The tab is 48px tall and sits on the bar's bottom edge (the bar is 64px).
+   The strip scrolls sideways when it is too narrow, with no scrollbar. Below 600px the camera button (#camsel) does that job. */
+.pb-switch{display:flex;align-items:stretch;align-self:stretch;min-width:0;flex:0 1 auto}
+#chips{display:flex;align-items:stretch;align-self:stretch;min-width:0;overflow-x:auto;scrollbar-width:none}
+#chips::-webkit-scrollbar{display:none}
+.pb-tab{position:relative;isolation:isolate;display:inline-flex;align-items:stretch;justify-content:center;gap:var(--s-2);flex:none;box-sizing:border-box;height:auto;margin:0;padding:0 var(--s-4);
+  border:0;border-radius:0;background:transparent;color:var(--md-sys-color-on-surface-variant);font:inherit;font-size:var(--md-sys-typescale-label-large-size);line-height:var(--md-sys-typescale-label-large-line-height);
+  font-weight:var(--md-sys-typescale-label-large-weight);letter-spacing:var(--md-sys-typescale-label-large-tracking);white-space:nowrap;cursor:pointer}
+/* the label fills the tab's height, so the active indicator sits on the bottom edge */
+.pb-tab-lbl{position:relative;display:flex;align-items:center;min-width:0;max-width:24ch;overflow:hidden}
+.pb-tab.on{color:var(--md-sys-color-primary);font-weight:600}
+/* the state layer is an inset pill (not the full bar height); the label and its 3px indicator keep the full height */
+#chips .pb-tab::before{inset:10px 0;border-radius:var(--md-sys-shape-corner-small)}
+.pb-tab.on{box-shadow:inset 0 -3px 0 var(--md-sys-color-primary)}   /* the indicator spans the whole tab (label and status dot), on the bar's bottom edge */
+/* not set up (or switched off): the same tab with a dashed bottom border instead of the indicator */
+.pb-tab[aria-disabled="true"]{color:var(--md-sys-color-on-surface-variant);border-bottom:2px dashed var(--md-sys-color-outline)}
+/* status dot from data-s (set by pollStatus), after the label; not on cameras that are not set up */
+.pb-tab[data-s]:not([aria-disabled="true"])::after{content:"";align-self:center;flex:none;width:6px;height:6px;border-radius:50%;background:var(--md-sys-color-outline)}
+.pb-tab[data-s="ok"]:not([aria-disabled="true"])::after{background:var(--md-sys-color-ok)}
+.pb-tab[data-s="wait"]:not([aria-disabled="true"])::after{background:var(--md-sys-color-warn)}
+.pb-tab[data-s="bad"]:not([aria-disabled="true"])::after{background:var(--md-sys-color-error)}
+.pb-setup{display:inline-flex;align-items:center;align-self:center;height:20px;padding:0 var(--s-2);border-radius:var(--md-sys-shape-corner-full);background:var(--md-sys-color-surface-container-high);
+  color:var(--md-sys-color-on-surface-variant);font-size:var(--md-sys-typescale-label-small-size);line-height:var(--md-sys-typescale-label-small-line-height);font-weight:var(--md-sys-typescale-label-small-weight);white-space:nowrap}
+.pb-btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--s-2);flex:none;height:36px;padding:0 12px;border:1px solid var(--c-line);border-radius:var(--r-md);
+  background:var(--c-surface-2);color:var(--c-text);font:inherit;font-size:14px;line-height:20px;font-weight:600;white-space:nowrap;cursor:pointer}
+.pb-btn:hover{border-color:var(--c-text-3)}
+.pb-btn.ghost{background:transparent;border-color:transparent;color:var(--c-accent-text)}
+.pb-btn.ghost:hover{background:var(--c-accent-soft)}
+.pb-btn .pb-ico{width:18px;height:18px}
+/* the one filled button of a surface (the player's Export; the export dialog's Export): primary, label-large, 40px, full-round, 18px leading icon */
+.pb-filled{position:relative;isolation:isolate;height:40px;padding:0 var(--s-6) 0 var(--s-4);border:0;border-radius:var(--md-sys-shape-corner-full);background:var(--md-sys-color-primary);color:var(--md-sys-color-on-primary);
+  font-size:var(--md-sys-typescale-label-large-size);line-height:var(--md-sys-typescale-label-large-line-height);font-weight:var(--md-sys-typescale-label-large-weight);letter-spacing:var(--md-sys-typescale-label-large-tracking)}
+.pb-ico{width:20px;height:20px;display:block;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.pb-bar-r{display:flex;align-items:center;gap:var(--s-2);margin-left:auto;flex:none}
+.pb-mi{position:relative;isolation:isolate;display:flex;align-items:center;gap:var(--s-3);width:100%;min-height:40px;padding:0 12px;border:0;border-radius:var(--r-sm);background:transparent;
+  color:var(--c-text);font:inherit;font-size:14px;line-height:20px;text-align:left;cursor:pointer}
+.pb-mi-ico{display:block;flex:none;width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.pb-sep{height:1px;margin:4px 0;border:0;background:var(--c-line)}
+
+/* transport bar (56px): mode control, speed (Recorded only), date stepper and Export on the right */
+/* transport bar, status line and timeline share one card under the video (12px below it) */
+.pb-card{margin-top:var(--s-3);padding:var(--s-4);background:var(--md-sys-color-surface-container-low);border:0;border-radius:var(--md-sys-shape-corner-medium)}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-3);min-height:44px;padding:0 0 var(--s-2)}
+.pb-seg{display:inline-flex;align-items:stretch;height:40px;padding:0;border:1px solid var(--md-sys-color-outline);border-radius:var(--md-sys-shape-corner-full);background:transparent}
+.pb-seg-btn{position:relative;isolation:isolate;display:inline-flex;align-items:center;gap:6px;min-width:0;padding:0 var(--s-4);border:0;border-radius:0;
+  background:transparent;color:var(--md-sys-color-on-surface-variant);font:inherit;font-size:var(--md-sys-typescale-label-large-size);line-height:var(--md-sys-typescale-label-large-line-height);
+  font-weight:var(--md-sys-typescale-label-large-weight);letter-spacing:var(--md-sys-typescale-label-large-tracking);font-variant-numeric:tabular-nums;cursor:pointer}
+.pb-seg-btn:first-child{border-radius:var(--md-sys-shape-corner-full) 0 0 var(--md-sys-shape-corner-full)}
+.pb-seg-btn:last-child{border-radius:0 var(--md-sys-shape-corner-full) var(--md-sys-shape-corner-full) 0}
+.pb-seg-btn+.pb-seg-btn{border-left:1px solid var(--md-sys-color-outline)}
+.pb-seg-btn.on,.pb-seg-btn[aria-checked="true"]{background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container)}
+.pb-mode-dot{width:14px;height:14px;flex:none;fill:var(--c-bad);stroke:none}
+#live.on .pb-mode-dot{animation:pb-pulse 1.4s ease-in-out infinite}
+@keyframes pb-pulse{50%{opacity:.35}}
+@media(prefers-reduced-motion:reduce){#live.on .pb-mode-dot{animation:none}}
+/* speed strip: always laid out; in Live it is muted and does not respond (its tooltip gives the meaning) */
+.pb-speed{display:inline-flex;align-items:center;gap:var(--s-2)}
+.pb-cap{font-size:12px;line-height:16px;font-weight:500;color:var(--c-text-2)}
+/* sound toggle (Live only, shown by app.js paintSound via the hidden attribute) */
+.pb-sound{position:relative;isolation:isolate;display:inline-flex;align-items:center;justify-content:center;flex:none;width:40px;height:40px;padding:0;border:0;border-radius:var(--md-sys-shape-corner-full);
+  background:transparent;color:var(--md-sys-color-on-surface-variant);cursor:pointer}
+.pb-sound[aria-pressed="true"]{background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container)}
+.pb-sound .pb-ico{width:24px;height:24px}
+.pb-sound .pb-snd-off{display:none}
+.pb-sound[aria-pressed="false"] .pb-snd-on{display:none}
+.pb-sound[aria-pressed="false"] .pb-snd-off{display:inline}
+/* tooltips (CSS only, from data-tip): shown on hover and on keyboard focus after 300 ms, below the control, never over the video */
+[data-tip]{position:relative}
+[data-tip]::after{content:attr(data-tip);position:absolute;z-index:20;top:calc(100% + 6px);left:0;width:max-content;max-width:260px;padding:var(--s-2) var(--s-3);
+  border:1px solid var(--c-line);border-radius:var(--r-md);background:var(--c-surface);color:var(--c-text);box-shadow:var(--e-1);
+  font-size:13px;line-height:18px;font-weight:400;text-align:left;white-space:normal;pointer-events:none;opacity:0;visibility:hidden;
+  transition:opacity var(--t-fast) var(--ease),visibility var(--t-fast) var(--ease)}
+[data-tip]:hover::after{opacity:1;visibility:visible;transition-delay:300ms}
+[data-tip]:focus-visible::after{opacity:1;visibility:visible;transition-delay:300ms}
+[data-tip]:has(:focus-visible)::after{opacity:1;visibility:visible;transition-delay:300ms}
+#speed.live{opacity:.38}
+#speed.live .pb-seg-btn{pointer-events:none}
+.tx-r{display:flex;align-items:center;gap:var(--s-3);margin-left:auto}
+.date{display:flex;align-items:center;gap:var(--s-1);font-size:var(--md-sys-typescale-label-large-size);line-height:var(--md-sys-typescale-label-large-line-height);
+  font-weight:var(--md-sys-typescale-label-large-weight);font-variant-numeric:tabular-nums}
+.date button{position:relative;isolation:isolate;display:inline-flex;align-items:center;justify-content:center;height:40px;min-width:40px;padding:0;border:0;border-radius:var(--md-sys-shape-corner-full);
+  background:transparent;color:var(--md-sys-color-on-surface-variant);font:inherit;cursor:pointer}
+.date .pb-ico{width:24px;height:24px}
+.date input{position:absolute;opacity:0;pointer-events:none;width:0}
+/* the date label is a text button (primary, label-large) that opens the picker */
+.date .d{width:auto;min-width:96px;padding:0 var(--s-3);color:var(--md-sys-color-primary);text-align:center;cursor:pointer}
+/* camera status alert: a strip under the transport bar, above the status line (never over the picture) */
+#camstat{display:none;margin:var(--s-2) 0 0;padding:8px 12px;border-radius:var(--r-md);background:var(--c-warn-soft);color:var(--c-warn);font-size:13px;line-height:18px;font-weight:500}
+/* status line under the transport bar: 13/18, 8px dot by tone */
+.pb-status{display:flex;align-items:center;gap:var(--s-2);min-height:20px;margin:0;font-size:13px;line-height:18px;color:var(--c-text-2)}
+.pb-status::before{content:"";width:8px;height:8px;border-radius:50%;flex:none;background:var(--c-text-3)}
+.pb-status.t-ok::before{background:var(--c-ok)}
+.pb-status.t-warn::before{background:var(--c-warn)}
+.pb-status.t-bad::before{background:var(--c-bad)}
+.pb-status.t-accent::before{background:var(--c-accent)}
+
+#tlwrap{position:relative;margin-top:var(--s-2);padding-top:0;touch-action:none;user-select:none}
+/* value label: M3 plain tooltip (inverse surface, label-small, 4px corners, small caret) */
+#bubble{position:absolute;top:3px;left:50%;transform:translateX(-50%);background:var(--md-sys-color-inverse-surface);color:var(--md-sys-color-inverse-on-surface);border-radius:var(--md-sys-shape-corner-extra-small);
+  padding:3px 9px;font-size:var(--md-sys-typescale-label-small-size);line-height:var(--md-sys-typescale-label-small-line-height);font-weight:var(--md-sys-typescale-label-small-weight);letter-spacing:var(--md-sys-typescale-label-small-tracking);font-variant-numeric:tabular-nums;white-space:nowrap;
+  pointer-events:none;z-index:2}
+#bubble:after{content:"";position:absolute;left:50%;top:100%;transform:translateX(-50%);
+  border:4px solid transparent;border-top-color:var(--md-sys-color-inverse-surface);border-bottom:0}
+#cv{width:100%;height:96px;display:block;cursor:grab}
+#cv:active{cursor:grabbing}
+#head{position:absolute;left:50%;top:40px;bottom:0;width:2px;background:var(--md-sys-color-primary);transform:translateX(-1px);pointer-events:none}
+.th img{width:100%;height:100%;object-fit:cover;display:block}
+.exp-note{margin-top:6px;color:var(--c-text-2)}
+#ptz{display:none;grid-template-columns:repeat(3,34px);grid-template-rows:repeat(2,30px);gap:3px}
+#ptz button{border:1px solid var(--c-line);background:var(--c-surface-2);color:var(--c-text);border-radius:var(--r-sm);cursor:pointer;font-size:13px;padding:0;touch-action:none;user-select:none}
+#ptz button:active{background:var(--c-accent);color:var(--c-on-accent)}
+#ptz [data-d=up]{grid-column:2;grid-row:1}
+#ptz [data-d=left]{grid-column:1;grid-row:2}
+#ptz [data-d=down]{grid-column:2;grid-row:3}
+#ptz [data-d=right]{grid-column:3;grid-row:2}
+#ptz .c{grid-column:2;grid-row:2;border-radius:50%;background:rgba(255,255,255,.28);margin:9px;pointer-events:none}
+#ptzmsg{color:var(--err);font-size:12px;max-width:220px}
+#ptzmsg.info{color:var(--c-text-2)}
+dialog{border:1px solid var(--c-line);border-radius:var(--r-lg);background:var(--c-surface);color:var(--c-text);padding:20px;width:min(460px,92vw);box-shadow:var(--e-1)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog h2{margin:0 0 14px;font-size:18px}
+dialog label{display:block;margin:10px 0 4px;color:var(--c-text-2);font-size:13px}
+dialog input,dialog select{width:100%;padding:8px;border:1px solid var(--c-line-strong);border-radius:var(--r-md);background:var(--c-surface);color:var(--c-text);font:inherit}
+dialog .row{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
+dialog .row button{min-height:36px;padding:8px 16px;border-radius:var(--r-md);border:1px solid var(--c-line);background:var(--c-surface-2);color:var(--c-text);font:inherit;cursor:pointer}
+dialog .row button.go{background:var(--c-accent);border-color:var(--c-accent);color:var(--c-on-accent)}
+#expmsg{margin-top:var(--s-4);font-size:var(--md-sys-typescale-body-medium-size);line-height:var(--md-sys-typescale-body-medium-line-height);color:var(--md-sys-color-on-surface-variant);min-height:1.3em}
+/* linear progress (M3): 4px track, primary indicator, rounded ends; shown while an export runs (app.js sets display) */
+#expbar{display:none;appearance:none;-webkit-appearance:none;width:100%;height:4px;margin-top:var(--s-2);border:0;border-radius:var(--md-sys-shape-corner-full);background:var(--md-sys-color-surface-container-highest);color:var(--md-sys-color-primary);overflow:hidden}
+#expbar::-webkit-progress-bar{background:var(--md-sys-color-surface-container-highest);border-radius:var(--md-sys-shape-corner-full)}
+#expbar::-webkit-progress-value{background:var(--md-sys-color-primary);border-radius:var(--md-sys-shape-corner-full)}
+#expbar::-moz-progress-bar{background:var(--md-sys-color-primary);border-radius:var(--md-sys-shape-corner-full)}
+/* export dialog: M3 basic dialog (surface container high, 28px corners, 24px padding); outlined fields with labels above; text Close, filled Export */
+#exp{border:0;border-radius:var(--md-sys-shape-corner-extra-large);background:var(--md-sys-color-surface-container-high);color:var(--md-sys-color-on-surface);padding:var(--s-6);box-shadow:none}
+#exp h2{margin:0 0 var(--s-4);font-size:var(--md-sys-typescale-headline-small-size);line-height:var(--md-sys-typescale-headline-small-line-height);font-weight:var(--md-sys-typescale-headline-small-weight);letter-spacing:var(--md-sys-typescale-headline-small-tracking);color:var(--md-sys-color-on-surface)}
+#exp label{margin:var(--s-3) 0 var(--s-1);color:var(--md-sys-color-on-surface-variant);font-size:var(--md-sys-typescale-label-medium-size);line-height:var(--md-sys-typescale-label-medium-line-height);font-weight:var(--md-sys-typescale-label-medium-weight);letter-spacing:var(--md-sys-typescale-label-medium-tracking)}
+#exp input,#exp select{width:100%;height:56px;padding:0 var(--s-4);border:1px solid var(--md-sys-color-outline);border-radius:var(--md-sys-shape-corner-extra-small);background:transparent;color:var(--md-sys-color-on-surface);
+  font:inherit;font-size:var(--md-sys-typescale-body-large-size);line-height:var(--md-sys-typescale-body-large-line-height)}
+#exp .row{margin-top:var(--s-6);gap:var(--s-2)}
+#exp .row button{position:relative;isolation:isolate;min-height:40px;padding:0 var(--s-3);border:0;border-radius:var(--md-sys-shape-corner-full);background:transparent;color:var(--md-sys-color-primary);
+  font:inherit;font-size:var(--md-sys-typescale-label-large-size);line-height:var(--md-sys-typescale-label-large-line-height);font-weight:var(--md-sys-typescale-label-large-weight);letter-spacing:var(--md-sys-typescale-label-large-tracking);cursor:pointer}
+#exp .row .pb-filled{padding:0 var(--s-6);background:var(--md-sys-color-primary);color:var(--md-sys-color-on-primary)}
+#explinks a{display:block;margin-top:6px;color:var(--c-accent-text)}
+/* filter chips (32px, pill; pressed = accent soft + accent border) */
+.chip{border:1px solid var(--c-line);background:var(--c-surface);color:var(--c-text);padding:8px 16px;border-radius:var(--r-pill);
+  font:inherit;font-size:14px;cursor:pointer;white-space:nowrap}
+.chip.on{background:var(--c-accent);border-color:var(--c-accent);color:var(--c-on-accent);font-weight:600}
+#filters{display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 10px}
+/* M3 filter chip: 32px, 8px corners, 1px outline; selected = secondary container, no outline, 18px check first */
+#filters .chip{position:relative;isolation:isolate;display:flex;align-items:center;gap:var(--s-2);height:32px;padding:0 var(--s-3);border:1px solid var(--md-sys-color-outline);border-radius:var(--md-sys-shape-corner-full);background:transparent;color:var(--md-sys-color-on-surface-variant);
+  font:inherit;font-size:var(--md-sys-typescale-label-large-size);line-height:var(--md-sys-typescale-label-large-line-height);font-weight:var(--md-sys-typescale-label-large-weight);letter-spacing:var(--md-sys-typescale-label-large-tracking)}
+#filters .chip::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;opacity:0;pointer-events:none;transition:opacity var(--md-sys-motion-duration-short2) ease}
+#filters .chip:hover::before{opacity:var(--md-sys-state-hover)}
+#filters .chip:focus-visible::before{opacity:var(--md-sys-state-focus)}
+#filters .chip:active::before{opacity:var(--md-sys-state-pressed)}
+#filters .chip i{width:8px;height:8px;border-radius:50%;display:inline-block}
+#filters .chip.on{background:var(--md-sys-color-secondary-container);border-color:transparent;color:var(--md-sys-color-on-secondary-container)}
+#filters .chip span{opacity:.7}
+/* Desktop: video + timeline on the left, Detected Events as a scrolling right column. The video is exactly 16:9 at the
+   height that fits the screen (--chrome is the height of everything else; 340px where the transport bar wraps). The
+   two columns are centred, so the leftover width becomes equal margins on the left and right of the page. */
+@media(min-width:960px){
+  #cols{display:grid;align-items:start;justify-content:center;
+    grid-template-columns:min(calc(100% - var(--side) - var(--s-6)),max(480px,calc((100dvh - var(--chrome))*16/9))) var(--side);column-gap:var(--s-6)}
+  #vwrap{width:100%}
+  main{position:static}
+  /* a card whose top edge is the video's top edge and whose bottom edge is the timeline card's bottom edge: it stretches to the
+     left column's height (contain:size keeps its own list from stretching the row) and never grows past the viewport */
+  aside{position:sticky;top:var(--pt);align-self:stretch;contain:size;max-height:calc(100dvh - var(--bar-h) - 2*var(--pt));display:flex;flex-direction:column;
+    border:0;border-radius:var(--md-sys-shape-corner-large);background:var(--md-sys-color-surface-container-low);overflow:hidden}
+  #evs{flex:1;min-height:0;overflow-y:auto;padding-top:var(--s-3,12px);scroll-padding-top:var(--s-3,12px)}   /* only the list scrolls, so the scrollbar starts below the pinned header */
+  .th{width:112px}
+}
+
+/* pan/tilt pad: semi-transparent overlay in the video's top-right corner (Live only) */
+#vwrap #ptz{position:absolute;top:var(--s-4);right:var(--s-4);z-index:3;width:104px;height:104px;border-radius:50%;opacity:.55;
+  transition:opacity .2s;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:0;padding:6px;box-sizing:border-box;
+  background:rgba(18,18,18,.42);border:1px solid rgba(255,255,255,.2);box-shadow:0 4px 14px rgba(0,0,0,.28);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#vwrap #ptz:hover,#vwrap #ptz:focus-within,#vwrap #ptz:active{opacity:1}
+#vwrap #ptz button{position:relative;isolation:isolate;background:transparent;border:0;border-radius:50%;color:var(--c-on-media);display:flex;align-items:center;justify-content:center;
+  transition:transform var(--md-sys-motion-duration-short2) ease}
+#vwrap #ptz button svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+#vwrap #ptz button:active{transform:scale(.9)}
+#vwrap #ptz .c{margin:11px;background:rgba(255,255,255,.22);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+/* the pad's column: the saved-presets menu under the pad, the message under the menu (stacked, so they never overlap) */
+#vwrap #ptzside{position:absolute;top:calc(var(--s-4) + 124px);right:var(--s-4);z-index:3;width:104px;display:flex;flex-direction:column;align-items:center;gap:6px}
+#vwrap #ptzpre{display:none;flex-direction:column;align-items:center;opacity:.55;transition:opacity .2s;max-width:100%}
+#vwrap #ptzpre:hover,#vwrap #ptzpre:focus-within,#vwrap #ptzpre:has(#ptzpbtn[aria-expanded=true]){opacity:1}
+/* the pad and the presets control are one overlay: waking either one wakes both */
+#vwrap:has(#ptz:hover) #ptzpre,#vwrap:has(#ptz:focus-within) #ptzpre,#vwrap:has(#ptz:active) #ptzpre,
+#vwrap:has(#ptzpre:hover) #ptz,#vwrap:has(#ptzpre:focus-within) #ptz,#vwrap:has(#ptzpbtn[aria-expanded=true]) #ptz{opacity:1}
+#vwrap #ptzpbtn{position:relative;isolation:isolate;display:inline-flex;align-items:center;justify-content:center;gap:var(--s-2);height:40px;padding:0 var(--s-4) 0 var(--s-3);border:0;border-radius:var(--md-sys-shape-corner-full);
+  background:rgba(18,18,18,.42);color:var(--c-on-media);box-shadow:inset 0 0 0 1px rgba(255,255,255,.2),0 4px 14px rgba(0,0,0,.28);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);   /* the same scrim surface as the pad: one overlay, one look */
+  font-size:var(--md-sys-typescale-label-large-size);line-height:var(--md-sys-typescale-label-large-line-height);font-weight:var(--md-sys-typescale-label-large-weight);letter-spacing:var(--md-sys-typescale-label-large-tracking);
+  cursor:pointer;transition:transform var(--md-sys-motion-duration-short2) ease;white-space:nowrap}
+/* the trigger's own icon is its ::before, so its state layer is the ::after */
+#vwrap #ptzpbtn::after{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;opacity:0;pointer-events:none;transition:opacity var(--md-sys-motion-duration-short2) ease}
+#vwrap #ptzpbtn:not(:disabled):hover::after{opacity:var(--md-sys-state-hover)}
+#vwrap #ptzpbtn:not(:disabled):focus-visible::after{opacity:var(--md-sys-state-focus)}
+#vwrap #ptzpbtn:not(:disabled):active::after{opacity:var(--md-sys-state-pressed)}
+#vwrap #ptzpbtn:active{transform:scale(.96)}
+#vwrap #ptzpbtn::before{content:"";width:12px;height:12px;flex:none;background:currentColor;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21s-6-5.4-6-10a6 6 0 0 1 12 0c0 4.6-6 10-6 10z'/%3E%3Ccircle cx='12' cy='11' r='2'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21s-6-5.4-6-10a6 6 0 0 1 12 0c0 4.6-6 10-6 10z'/%3E%3Ccircle cx='12' cy='11' r='2'/%3E%3C/svg%3E") center/contain no-repeat}
+#vwrap #ptzpbtn:disabled{cursor:default;white-space:normal;text-align:center;height:auto;min-height:28px;padding:5px 12px;border-radius:14px;max-width:190px}
+#vwrap #ptzpbtn:focus-visible,#vwrap #ptzplist button:focus-visible{outline:2px solid var(--md-sys-color-primary);outline-offset:2px}
+#vwrap #ptzplist{display:flex;flex-direction:column;gap:1px;margin-top:6px;width:128px;max-height:220px;overflow-y:auto;
+  padding:var(--s-1);box-sizing:border-box;border-radius:var(--md-sys-shape-corner-medium);background:rgba(18,18,18,.72);box-shadow:inset 0 0 0 1px rgba(255,255,255,.2);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:0}
+#vwrap #ptzplist[hidden]{display:none}
+#vwrap #ptzplist button{position:relative;isolation:isolate;height:48px;background:transparent;border:0;border-radius:var(--md-sys-shape-corner-small);color:var(--c-on-media);
+  font-size:var(--md-sys-typescale-label-large-size);line-height:var(--md-sys-typescale-label-large-line-height);font-weight:var(--md-sys-typescale-label-large-weight);letter-spacing:var(--md-sys-typescale-label-large-tracking);
+  text-align:center;padding:0 var(--s-3);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#vwrap #ptzmsg{max-width:220px;text-align:center;padding:4px 9px;border-radius:7px;
+  background:rgba(140,25,25,.85);color:var(--c-on-media);font-size:12px}
+#vwrap #ptzmsg.info{background:rgba(0,0,0,.6);color:var(--c-on-media)}
+#vwrap #ptzmsg:empty{display:none}
+/* title + type chips stay pinned while the events list scrolls */
+#evhead{position:sticky;top:0;z-index:2;background:var(--md-sys-color-surface-container-low)}
+#evrefresh::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;opacity:0;pointer-events:none;transition:opacity var(--md-sys-motion-duration-short2) ease}
+#evrefresh:not([aria-disabled="true"]):hover::before{opacity:var(--md-sys-state-hover)}
+#evrefresh:focus-visible::before{opacity:var(--md-sys-state-focus)}
+#evrefresh:active::before{opacity:var(--md-sys-state-pressed)}
+#evrefresh svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#evrefresh .ic-load{display:none;animation:evspin .8s linear infinite}
+#evrefresh.spin .ic-refresh{display:none}
+#evrefresh.spin .ic-load{display:block}
+#evrefresh[aria-disabled="true"]{cursor:default}
+@keyframes evspin{to{transform:rotate(360deg)}}
+/* skeletons: a surface-container-highest shimmer (static under prefers-reduced-motion) */
+.chsk,.evsk{background:linear-gradient(90deg,var(--md-sys-color-surface-container-highest),var(--md-sys-color-surface-container-high),var(--md-sys-color-surface-container-highest)) 0 0/200% 100%;animation:evshimmer 1.4s linear infinite}
+.chsk{display:inline-block;height:32px;border-radius:var(--md-sys-shape-corner-small)}
+.evsk{height:72px;margin:0 8px 4px;border-radius:var(--md-sys-shape-corner-small)}
+@keyframes evshimmer{from{background-position:100% 0}to{background-position:-100% 0}}
+@media (prefers-reduced-motion:reduce){.chsk,.evsk{animation:none}}
+#evhead #filters{padding-bottom:12px}
+/* setup wizard and Settings (static/setup.js), Material 3 (docs/ux/m3-principles.md, rules R1 to R9).
+   Surfaces are tonal (surface, surface-container*), never outlined (R6); selection is secondary-container (R3); one filled button
+   per screen (R1); text uses the type roles below (R8); every control has the same state layer and focus ring (R7).
+   A block sets no outer margin of its own: the parent sets the gap (.su-view 20, .su-stack 20 between fields, .su-sec 12,
+   .su-pane-in 32). Ghost (text) buttons at a start edge hang their padding outside the content box (--su-pad-x). */
+[hidden]{display:none!important}
+#setup{position:fixed;inset:0;z-index:20;overflow-x:hidden;overflow-y:auto;background:var(--md-sys-color-surface);color:var(--md-sys-color-on-surface);font-family:var(--font)}
+#setup button,#setup input,#setup select{font:inherit}
+:where(#setup) :where(h1,h2,h3,h4,p,ul,ol,dl,dd,dt){margin:0}
+:where(#setup) :where(ul,ol){padding:0;list-style:none}
+#setup :focus-visible{outline:2px solid var(--md-sys-color-primary);outline-offset:2px}
+#setup [tabindex="-1"]:focus{outline:none}
+#setup .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+#setup details{margin:0}
+#setup summary{cursor:pointer;list-style:none}
+#setup summary::-webkit-details-marker{display:none}
+@media(prefers-reduced-motion:reduce){#setup *{transition-duration:0s!important;animation-duration:0s!important}}
+
+/* type roles (R8): every text in Settings and the wizard is one of these */
+#setup,.su-lead,.su-tog-l,.su-cred-v,.su-row,.su-alert,.su-alert-body p,.su-privacy,.su-more summary,.su-more-d>summary,.su-more-body,.su-field>label,.su-msg,.su-busy,.su-reach,.su-dl,.su-dlg-b,.su-toast,.su-checklist strong,.su-srow-main,.su-h3,.su-qr-addr{font-size:var(--md-sys-typescale-body-large-size);line-height:var(--md-sys-typescale-body-large-line-height);font-weight:var(--md-sys-typescale-body-large-weight);letter-spacing:var(--md-sys-typescale-body-large-tracking)}
+.su-sub,.su-detail,.su-note,.su-meta,.su-reason,.su-hint,.su-err,.su-cred-l,.su-row-sub,.su-foot-note,.su-hold,.su-faint,.su-saved,.su-caption,.su-cred-note,.su-dl,.su-alert,.su-alert-body p,.su-privacy,.su-msg,.su-busy,.su-reach,.su-more-body,.su-field>label,.su-mono{font-size:var(--md-sys-typescale-body-medium-size);line-height:var(--md-sys-typescale-body-medium-line-height);font-weight:var(--md-sys-typescale-body-medium-weight);letter-spacing:var(--md-sys-typescale-body-medium-tracking)}
+.su-btn,.su-chip,.su-seg-btn,.su-grp-h,.su-sec-h,.su-alert-t,.su-num{font-size:var(--md-sys-typescale-label-large-size);line-height:var(--md-sys-typescale-label-large-line-height);font-weight:var(--md-sys-typescale-label-large-weight);letter-spacing:var(--md-sys-typescale-label-large-tracking)}
+.su-chip{font-size:var(--md-sys-typescale-label-medium-size);line-height:var(--md-sys-typescale-label-medium-line-height);letter-spacing:var(--md-sys-typescale-label-medium-tracking)}
+.su-title,.su-name,.su-dlg-t,.su-appname{font-size:var(--md-sys-typescale-title-large-size);line-height:var(--md-sys-typescale-title-large-line-height);font-weight:var(--md-sys-typescale-title-large-weight);letter-spacing:var(--md-sys-typescale-title-large-tracking)}
+.su-name,.su-dlg-t{font-size:var(--md-sys-typescale-title-medium-size);line-height:var(--md-sys-typescale-title-medium-line-height);font-weight:var(--md-sys-typescale-title-medium-weight);letter-spacing:var(--md-sys-typescale-title-medium-tracking)}
+.su-display,.su-id-name{font-size:var(--md-sys-typescale-headline-small-size);line-height:var(--md-sys-typescale-headline-small-line-height);font-weight:var(--md-sys-typescale-headline-small-weight);letter-spacing:var(--md-sys-typescale-headline-small-tracking)}
+.su-display{font-size:var(--md-sys-typescale-headline-medium-size);line-height:var(--md-sys-typescale-headline-medium-line-height)}
+.su-lead,.su-sub,.su-detail,.su-note,.su-meta,.su-reason,.su-hint,.su-cred-l,.su-row-sub,.su-caption,.su-msg,.su-privacy,.su-dlg-b,.su-dl dt,.su-more-body{color:var(--md-sys-color-on-surface-variant)}
+.su-foot-note,.su-hold,.su-faint{color:var(--md-sys-color-on-surface-variant)}
+.su-link{color:var(--md-sys-color-primary);text-decoration:underline}
+.su-meta{overflow-wrap:anywhere}
+.su-mono{font-family:var(--mono)}
+.su-lead{max-width:60ch}
+.su-name{overflow-wrap:anywhere}
+.su-ok{color:var(--md-sys-color-ok)}
+.su-warn{color:var(--md-sys-color-warn)}
+.su-bad{color:var(--md-sys-color-error)}
+.su-ico{width:24px;height:24px;flex:none;display:block;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.su-ico.su-ok{color:var(--md-sys-color-ok)}
+.su-ico.su-bad{color:var(--md-sys-color-error)}
+
+/* the page: the wizard is one tonal card that grows with its content; Settings is full width on the surface */
+#suwrap{box-sizing:border-box;min-width:0;max-width:560px;margin:48px auto;padding:32px;background:var(--md-sys-color-surface-container);border-radius:var(--md-sys-shape-corner-extra-large)}
+#suwrap.settings{max-width:none;margin:0;padding:0;background:transparent;border-radius:0}
+/* header: the wizard's brand; Settings' small top app bar (64px, sticky), title left, Done (a text button) on the right */
+.su-top{display:flex;align-items:center;gap:var(--s-3);min-height:28px}
+.su-brand{display:flex;align-items:center;gap:var(--s-3);min-width:0}
+.su-mark{width:28px;height:28px;flex:none}
+.su-mk-b{fill:none;stroke:var(--md-sys-color-on-surface-variant);stroke-width:1.75}
+.su-mk-f{fill:var(--md-sys-color-primary);stroke:none}
+#suwrap.settings .su-top{position:sticky;top:0;z-index:3;height:64px;padding-inline:max(32px,calc((100% - 1120px) / 2 + 32px));background:var(--md-sys-color-surface);box-shadow:inset 0 -1px 0 var(--md-sys-color-outline-variant)}
+.su-back.su-done{order:2;margin-inline:auto 0;border-color:transparent}   /* Done: the bar's one trailing action, a text button */
+.su-back{--su-pad-x:12px;margin-inline-start:calc(-1 * var(--su-pad-x))}
+/* progress (wizard): caption, then four 4px linear-progress segments */
+#sunav{margin-top:var(--s-5)}
+.su-caption{margin:0 0 var(--s-2)}
+.su-seg-list{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;list-style:none;margin:0;padding:0}
+.su-seg{height:4px;border-radius:var(--md-sys-shape-corner-full);background:var(--md-sys-color-secondary-container)}
+.su-seg.on{background:var(--md-sys-color-primary)}
+/* wizard body: blocks 20 apart; the footer below is sticky to the bottom of the viewport */
+#setupmain{min-width:0;margin-top:var(--s-6)}
+#suwrap.settings #setupmain{margin-top:0}
+.su-view{display:flex;flex-direction:column;gap:var(--s-5);min-width:0}
+.su-msg{color:var(--md-sys-color-on-surface-variant)}
+.su-busy{display:flex;align-items:center;gap:var(--s-2);color:var(--md-sys-color-on-surface)}
+.su-spin{display:inline-block;width:16px;height:16px;flex:none;border:2px solid var(--md-sys-color-secondary-container);border-top-color:var(--md-sys-color-primary);border-radius:50%;animation:su-spin .8s linear infinite}
+@keyframes su-spin{to{transform:rotate(360deg)}}
+.su-reach{display:flex;align-items:center;gap:var(--s-2)}
+.su-reach.su-ok{color:var(--md-sys-color-ok)}
+.su-reach.su-bad{color:var(--md-sys-color-error)}
+.su-reach>span{min-width:0;overflow-wrap:anywhere}
+
+/* buttons (R1): 40px, full-round, label-large. Outlined is the default; go = the one filled button of a screen; ghost = text button;
+   bad = filled error; bad-o = outlined error. All share one state layer (::before) and a 48px touch target (::after). */
+.su-btn{--su-pad-x:24px;position:relative;isolation:isolate;display:inline-flex;align-items:center;justify-content:center;gap:var(--s-2);height:40px;min-width:0;margin:0;padding:0 var(--su-pad-x);border:1px solid var(--md-sys-color-outline);border-radius:var(--md-sys-shape-corner-full);background:transparent;color:var(--md-sys-color-primary);text-align:center;cursor:pointer}
+.su-btn::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;opacity:0;pointer-events:none;transition:opacity var(--md-sys-motion-duration-short2) ease}
+.su-btn::after{content:"";position:absolute;inset:-4px 0}
+.su-btn:hover:not(:disabled)::before{opacity:var(--md-sys-state-hover)}
+.su-btn:focus-visible::before{opacity:var(--md-sys-state-focus)}
+.su-btn:active:not(:disabled)::before{opacity:var(--md-sys-state-pressed)}
+.su-btn.sm{height:32px;--su-pad-x:16px}
+.su-btn.sm::after{inset:-8px 0}
+.su-btn.go{background:var(--md-sys-color-primary);border-color:transparent;color:var(--md-sys-color-on-primary)}
+.su-btn.ghost{--su-pad-x:12px;background:transparent;border-color:transparent;color:var(--md-sys-color-primary)}
+.su-btn.bad{background:var(--md-sys-color-error);border-color:transparent;color:var(--md-sys-color-on-error)}
+.su-btn.bad-o{background:transparent;border-color:var(--md-sys-color-error);color:var(--md-sys-color-error)}
+.su-btn:disabled{background:color-mix(in srgb,var(--md-sys-color-on-surface) 12%,transparent);border-color:transparent;color:color-mix(in srgb,var(--md-sys-color-on-surface) 38%,transparent);cursor:not-allowed}
+.su-btn.ghost:disabled,.su-btn.bad-o:disabled{background:transparent}
+/* text buttons at a start edge hang their padding outside the content edge, so their text lines up with the text beside them */
+.su-nav-l>.su-btn.ghost,.su-bar>.su-btn.ghost:first-child{margin-inline-start:calc(-1 * var(--su-pad-x))}
+.su-bar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2)}
+.su-bar-end{justify-content:flex-end}
+.su-stack{display:flex;flex-direction:column;gap:var(--s-5);min-width:0}
+/* outlined text field: 56px, 4px corners, 1px outline that becomes a 2px primary outline on focus; the label sits above it (a floating label needs markup change: deferred) */
+.su-field{display:flex;flex-direction:column;gap:var(--s-2);min-width:0}
+.su-field>label{color:var(--md-sys-color-on-surface-variant)}
+.su-err{color:var(--md-sys-color-error)}
+.su-err:empty{display:none}
+#setup :where(input:not([type=radio],[type=checkbox]),select){width:100%;min-width:0;height:56px;padding:0 16px;border:1px solid var(--md-sys-color-outline);border-radius:var(--md-sys-shape-corner-extra-small);background:transparent;color:var(--md-sys-color-on-surface);font-size:var(--md-sys-typescale-body-large-size);line-height:var(--md-sys-typescale-body-large-line-height)}
+#setup input::placeholder{color:var(--md-sys-color-on-surface-variant)}
+#setup input:hover{border-color:var(--md-sys-color-on-surface)}
+#setup input:focus-visible,#setup select:focus-visible{outline:0;border-color:var(--md-sys-color-primary);box-shadow:0 0 0 1px var(--md-sys-color-primary)}
+#setup [aria-invalid="true"]{border-color:var(--md-sys-color-error)}
+#setup [aria-invalid="true"]:focus-visible{box-shadow:0 0 0 1px var(--md-sys-color-error)}
+#setup .su-num-in{width:80px;min-width:0;height:40px;padding:0 12px;text-align:right}
+.su-tog-r .su-num-in{flex:none}
+/* status chip (assist chip, 28px, full-round): the tone container, a dot in the tone */
+.su-chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:var(--md-sys-shape-corner-small);background:var(--md-sys-color-surface-container-highest);color:var(--md-sys-color-on-surface);white-space:nowrap;flex:none}
+.su-chip::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--md-sys-color-outline);flex:none}
+.su-chip.ok{background:var(--md-sys-color-ok-container)}
+.su-chip.ok::before{background:var(--md-sys-color-ok)}
+.su-chip.wait{background:var(--md-sys-color-warn-container)}
+.su-chip.wait::before{background:var(--md-sys-color-warn)}
+.su-chip.bad{background:var(--md-sys-color-error-container);color:var(--md-sys-color-on-error-container)}
+.su-chip.bad::before{background:var(--md-sys-color-error)}
+.su-chip.mut{background:var(--md-sys-color-surface-container-highest);color:var(--md-sys-color-on-surface-variant)}
+/* banner (R3): a tone container, 12px corners, no border, tone icon. At most one per camera. */
+.su-alert{--tone:var(--md-sys-color-outline);--tone-soft:var(--md-sys-color-surface-container-highest);--tone-on:var(--md-sys-color-on-surface);display:grid;grid-template-columns:24px minmax(0,1fr);column-gap:var(--s-3);align-items:start;margin:0;padding:var(--s-3) var(--s-4);border-radius:var(--md-sys-shape-corner-medium);background:var(--tone-soft);color:var(--tone-on)}
+.su-alert.ok{--tone:var(--md-sys-color-ok);--tone-soft:var(--md-sys-color-ok-container)}
+.su-alert.warn{--tone:var(--md-sys-color-warn);--tone-soft:var(--md-sys-color-warn-container)}
+.su-alert.bad{--tone:var(--md-sys-color-error);--tone-soft:var(--md-sys-color-error-container);--tone-on:var(--md-sys-color-on-error-container)}
+.su-alert>.su-ico{color:var(--tone)}
+.su-alert-body{display:grid;gap:var(--s-2);min-width:0}
+.su-alert-body p{color:inherit;overflow-wrap:anywhere}
+.su-alert-t{font-weight:600}
+/* the sign-in wait: a 4px linear progress that drains over the wait */
+.su-bar-track{height:4px;border-radius:var(--md-sys-shape-corner-full);background:var(--md-sys-color-secondary-container);overflow:hidden}
+.su-bar-fill{height:100%;background:var(--md-sys-color-primary);transform-origin:left center;transform:scaleX(var(--frac,1));transition:transform 1s linear}
+/* checklist, prerequisite rows, privacy line, disclosures (Prepare) */
+.su-checklist{display:grid;gap:var(--s-3);list-style:none;margin:0;padding:0}
+.su-checklist li{display:grid;grid-template-columns:32px minmax(0,1fr);column-gap:var(--s-3);align-items:start}
+.su-checklist strong{display:block;font-weight:500}
+.su-checklist .su-detail{display:block}
+.su-num{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--md-sys-color-primary-container);color:var(--md-sys-color-on-primary-container)}
+.su-status-rows{border-radius:var(--md-sys-shape-corner-large);background:var(--md-sys-color-surface-container-low);list-style:none;overflow:hidden}
+.su-status-rows>li{padding:var(--s-3) var(--s-4)}
+.su-status-rows>li+li{border-top:1px solid var(--md-sys-color-outline-variant)}
+.su-srow-top{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3)}
+.su-srow-main{display:flex;align-items:center;gap:var(--s-3);min-width:0;overflow-wrap:anywhere}
+.su-srow-top .su-detail{margin-top:var(--s-1)}
+.su-privacy{display:flex;align-items:flex-start;gap:var(--s-3)}
+.su-privacy .su-ico{color:var(--md-sys-color-primary)}
+.su-more{border-top:1px solid var(--md-sys-color-outline-variant)}
+.su-more details{border-bottom:1px solid var(--md-sys-color-outline-variant)}
+.su-more summary,.su-more-d>summary{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);min-height:56px;font-weight:500;color:var(--md-sys-color-on-surface)}
+.su-chev{color:var(--md-sys-color-on-surface-variant);transition:transform var(--md-sys-motion-duration-short3) ease}
+details[open]>summary>.su-chev{transform:rotate(90deg)}
+.su-more-body{padding:0 0 var(--s-4);max-width:60ch}
+/* the one disclosure of a camera pane and the reachability details of a wizard row */
+.su-more-d{border-top:1px solid var(--md-sys-color-outline-variant)}
+.su-more-d>summary{padding-inline:var(--s-1)}
+.su-more-d>.su-more-body{padding:0 var(--s-1) var(--s-4)}
+/* QR code: an icon button in the address row and the full code in the "Open on your phone" dialog */
+.su-btn.su-icon-only{--su-pad-x:0;width:40px}
+.su-btn.sm.su-icon-only{width:32px}
+.su-qr-modal{display:flex;flex-direction:column;align-items:center;gap:var(--s-4);text-align:center}
+.su-qr-img{display:block;width:260px;max-width:100%;height:auto;background:var(--c-qr);border-radius:var(--md-sys-shape-corner-medium)}
+.su-qr-addr{max-width:100%;overflow-x:auto;white-space:nowrap}
+/* cards (R6): tonal surface-container on the surface, 16px corners, no border; the rows inside are list items */
+.su-card-s{display:flex;flex-direction:column;min-width:0;border-radius:var(--md-sys-shape-corner-large);background:var(--md-sys-color-surface-container);overflow:hidden;overflow-wrap:anywhere}
+.su-pad{padding:var(--s-5);gap:var(--s-4)}
+.su-line{padding:14px var(--s-5)}
+.su-danger{background:var(--md-sys-color-surface-container)}
+.su-cam-head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:var(--s-3)}
+.su-cam-tools{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2)}
+.su-card-s .su-meta{margin-top:calc(var(--s-2) - var(--s-4))}
+/* list item (saved value): label, value, action, 56px, 16px side padding; the items of one card are divided by an outline-variant rule */
+.su-cred{display:grid;grid-template-columns:160px minmax(0,1fr) auto;align-items:center;gap:var(--s-2) var(--s-4);min-height:56px;padding:var(--s-2) var(--s-4);border-top:1px solid var(--md-sys-color-outline-variant)}
+.su-card-s>.su-cred:first-child,.su-card-s>.su-tog:first-child{border-top:0}
+.su-cred-wide{grid-template-columns:160px minmax(0,1fr);align-items:start}
+.su-cred-solo{grid-template-columns:minmax(0,1fr) auto}
+.su-cred-v{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);min-width:0;overflow-wrap:anywhere}
+.su-cred-a{display:flex;align-items:center;justify-content:flex-end;gap:var(--s-2)}
+/* an address or an IP is one token: it never breaks inside itself (a long value scrolls in its own box) */
+.su-cred-v .su-mono{white-space:nowrap}
+/* the address row: the address on its own line; the buttons sit beside it when they fit and wrap under it when they do not (right-aligned) */
+.su-cred.su-cred-addr{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2) var(--s-4)}
+.su-cred-addr>.su-cred-l{flex:0 0 100%}
+.su-cred-addr>.su-cred-v{flex:1 1 auto;min-width:0;max-width:100%;overflow-x:auto;overflow-wrap:normal;white-space:nowrap}
+.su-cred-addr>.su-cred-a{flex:none;margin-left:auto}
+/* icon inside a setup button (the plus of Add a device) */
+.su-btn-ico{width:18px;height:18px;flex:none}
+.su-cred-chip{display:inline-flex;flex-wrap:wrap;align-items:center;gap:var(--s-2)}
+.su-cred-note{padding:0 var(--s-4) var(--s-3)}
+.su-cred-note.su-bad{color:var(--md-sys-color-error)}
+.su-mask{letter-spacing:.14em;color:var(--md-sys-color-on-surface-variant)}
+.su-saved{color:var(--md-sys-color-ok)}
+/* toggles and numbers in Playback: 56px list items, the control on the right */
+.su-tog{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--s-2) var(--s-4);min-height:56px;padding:var(--s-2) var(--s-4);border-top:1px solid var(--md-sys-color-outline-variant)}
+.su-tog>.su-err{grid-column:1/-1}
+.su-tog-r{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:var(--s-2)}
+/* M3 switch: 52x32 track, a 16px thumb (outline) off and a 24px thumb (on-primary) on; its ::before extends the hit area to 60x48 */
+.su-switch{position:relative;flex:none;box-sizing:border-box;width:52px;height:32px;padding:0;border:2px solid var(--md-sys-color-outline);border-radius:var(--md-sys-shape-corner-full);background:var(--md-sys-color-surface-container-highest);cursor:pointer;transition:background var(--md-sys-motion-duration-short3) ease,border-color var(--md-sys-motion-duration-short3) ease}
+.su-switch::before{content:"";position:absolute;inset:-8px -4px}
+.su-switch::after{content:"";position:absolute;top:6px;left:6px;width:16px;height:16px;border-radius:50%;background:var(--md-sys-color-outline);transition:all var(--md-sys-motion-duration-short3) ease}
+.su-switch[aria-checked="true"]{background:var(--md-sys-color-primary);border-color:var(--md-sys-color-primary)}
+.su-switch[aria-checked="true"]::after{top:2px;left:22px;width:24px;height:24px;background:var(--md-sys-color-on-primary)}
+.su-dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s-2) var(--s-4)}
+.su-dl dd{overflow-wrap:anywhere}
+/* Settings: a navigation list (280px) and one detail pane; the pane is at most 720px wide */
+.su-set{display:grid;grid-template-columns:280px minmax(0,1fr);column-gap:40px;align-items:start;max-width:1120px;margin:0 auto;padding:32px 32px 48px}
+.su-side{position:sticky;top:96px;display:flex;flex-direction:column;gap:var(--s-6);min-width:0}
+.su-grp{display:flex;flex-direction:column;gap:var(--s-1);min-width:0}
+.su-grp-h{margin:0 0 var(--s-1);padding:0 var(--s-4);color:var(--md-sys-color-on-surface-variant)}
+/* navigation item: 56px, full-round, selected = secondary-container (R3), one state layer */
+.su-row{position:relative;isolation:isolate;display:flex;align-items:center;gap:var(--s-3);width:100%;min-height:56px;padding:0 var(--s-4);border:0;border-radius:var(--md-sys-shape-corner-full);background:transparent;color:var(--md-sys-color-on-surface-variant);text-align:left;cursor:pointer;font-weight:500}
+.su-row::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:var(--md-sys-color-on-surface);opacity:0;pointer-events:none;transition:opacity var(--md-sys-motion-duration-short2) ease}
+.su-row:hover::before{opacity:var(--md-sys-state-hover)}
+.su-row:focus-visible::before{opacity:var(--md-sys-state-focus)}
+.su-row[aria-current="page"]{background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container);font-weight:600}
+.su-row-wrap{position:relative}
+.su-row-mv-pad{padding-right:96px}
+.su-row-mv{position:absolute;top:50%;right:var(--s-2);display:flex;gap:0;transform:translateY(-50%)}
+/* move up / down: 40px standard icon buttons */
+.su-mv{position:relative;isolation:isolate;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;border:0;border-radius:var(--md-sys-shape-corner-full);background:transparent;color:var(--md-sys-color-on-surface-variant);cursor:pointer}
+.su-mv::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;opacity:0;pointer-events:none;transition:opacity var(--md-sys-motion-duration-short2) ease}
+.su-mv:hover:not(:disabled)::before{opacity:var(--md-sys-state-hover)}
+.su-mv:focus-visible::before{opacity:var(--md-sys-state-focus)}
+.su-mv:disabled{opacity:.38;cursor:default}
+.su-row-chev{margin-inline-start:auto;color:var(--md-sys-color-on-surface-variant)}
+.su-row-main{display:flex;flex-direction:column;min-width:0;flex:1}
+.su-row-name{overflow-wrap:anywhere}
+.su-row-sub{font-weight:400}
+.su-row-ico{color:var(--md-sys-color-on-surface-variant)}
+.su-row[aria-current="page"] .su-row-ico{color:var(--md-sys-color-on-secondary-container)}
+.su-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--md-sys-color-outline)}
+.su-dot.ok{background:var(--md-sys-color-ok)}
+.su-dot.wait{background:var(--md-sys-color-warn)}
+.su-dot.bad{background:var(--md-sys-color-error)}
+.su-pane{min-width:0;max-width:720px}
+.su-pane-in{display:flex;flex-direction:column;gap:var(--s-7);min-width:0}
+.su-ident{display:flex;flex-direction:column;gap:var(--s-4);min-width:0}
+.su-id{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--s-3)}
+.su-id-main{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);min-width:0}
+.su-id-name{overflow-wrap:anywhere}
+.su-id-r{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:var(--s-2)}
+.su-sec{display:flex;flex-direction:column;gap:var(--s-3);min-width:0}
+.su-sec-h{padding:0 var(--s-1);color:var(--md-sys-color-primary)}
+/* segmented button (R4): 40px, full-round, 1px outline, selected = secondary-container */
+.su-seg-group{display:inline-flex;flex-wrap:nowrap;gap:0;padding:0;border:1px solid var(--md-sys-color-outline);border-radius:var(--md-sys-shape-corner-full);overflow:hidden;background:transparent}
+.su-seg-btn{position:relative;isolation:isolate;min-height:40px;padding:0 var(--s-4);border:0;border-left:1px solid var(--md-sys-color-outline);border-radius:0;background:transparent;color:var(--md-sys-color-on-surface);cursor:pointer}
+.su-seg-btn:first-child{border-left:0}
+.su-seg-btn::before{content:"";position:absolute;inset:0;z-index:-1;background:currentColor;opacity:0;pointer-events:none;transition:opacity var(--md-sys-motion-duration-short2) ease}
+.su-seg-btn:hover::before{opacity:var(--md-sys-state-hover)}
+.su-seg-btn:focus-visible::before{opacity:var(--md-sys-state-focus)}
+.su-seg-btn[aria-pressed="true"],.su-seg-btn[aria-checked="true"]{background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container)}
+/* footer: sticky action row. Back (a text button) on the left, the actions on the right; a rule only where content scrolls under it */
+#setupfoot{position:sticky;bottom:0;z-index:2;margin:var(--s-6) calc(-1 * var(--s-7)) calc(-1 * var(--s-7));padding:var(--s-4) var(--s-7);background:var(--md-sys-color-surface-container);box-shadow:inset 0 1px 0 var(--md-sys-color-outline-variant);border-radius:0 0 var(--md-sys-shape-corner-extra-large) var(--md-sys-shape-corner-extra-large)}
+#setupfoot:empty{display:none}
+.su-nav{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--s-2)}
+.su-nav-l{display:flex;align-items:center;min-width:0}
+.su-nav-r{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:var(--s-2);min-width:0;margin-left:auto}
+/* basic dialog (R1): surface-container-high, 28px corners, 24px padding, title-medium headline, text buttons; the scrim is the scrim role at 32% */
+.su-dlg{box-sizing:border-box;width:min(400px,calc(100% - 48px));max-width:400px;padding:var(--s-6);border:0;border-radius:var(--md-sys-shape-corner-extra-large);background:var(--md-sys-color-surface-container-high);color:var(--md-sys-color-on-surface)}
+.su-dlg::backdrop{background:color-mix(in srgb,var(--md-sys-color-scrim) 32%,transparent)}
+.su-dlg-b{margin-top:var(--s-3)}
+.su-dlg-act{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--s-2);margin-top:var(--s-6)}
+/* snackbar: inverse-surface, 4px corners, an action in inverse-primary */
+.su-toast{position:fixed;left:50%;bottom:16px;z-index:30;transform:translateX(-50%);box-sizing:border-box;display:flex;align-items:center;gap:var(--s-3);width:max-content;max-width:min(400px,calc(100% - 32px));min-height:48px;padding:var(--s-2) var(--s-2) var(--s-2) var(--s-4);border:0;border-radius:var(--md-sys-shape-corner-extra-small);background:var(--md-sys-color-inverse-surface);color:var(--md-sys-color-inverse-on-surface)}
+.su-toast .su-btn{color:var(--md-sys-color-inverse-primary)}
+.su-toast:empty{display:none}
+.su-reason{align-self:center;max-width:32ch}
+/* Settings, tablet: two panes with 24px between them */
+@media(min-width:720px) and (max-width:959px){
+  .su-set{grid-template-columns:240px minmax(0,1fr);column-gap:24px;padding:24px 24px 40px}
+  #suwrap.settings .su-top{padding-inline:24px}
+}
+/* phone (under 720px): Settings is a list, then one detail screen; the list items stack label above value */
+@media(max-width:719px){
+  .su-set{grid-template-columns:minmax(0,1fr);padding:20px 20px 40px}
+  .su-side{position:static;gap:var(--s-6)}
+  .su-set[data-screen="detail"] .su-side{display:none}
+  .su-set[data-screen="list"] .su-pane{display:none}
+  .su-set[data-screen="list"] .su-row[aria-current="page"]{background:transparent;color:var(--md-sys-color-on-surface-variant);font-weight:500}   /* a list has no selection */
+  .su-pane{max-width:none}
+  .su-cred{grid-template-columns:minmax(0,1fr);gap:var(--s-1);padding:var(--s-3) var(--s-4)}
+  .su-cred-a{justify-content:flex-start}
+  .su-qr-addr{font-size:var(--md-sys-typescale-body-medium-size);line-height:var(--md-sys-typescale-body-medium-line-height)}
+  .su-cred-a>.su-btn.ghost:first-child{margin-inline-start:calc(-1 * var(--su-pad-x))}
+  .su-cred-wide{grid-template-columns:minmax(0,1fr)}
+  .su-cred-note,.su-cred-solo{padding-inline:var(--s-4)}
+  .su-tog{padding:var(--s-2) var(--s-4)}
+  #suwrap.settings .su-top{height:56px;padding-inline:20px}
+}
+/* phone: 16px inputs (no zoom on focus) below 720px; the wizard has no card frame, 20px side padding and a footer that sticks to the bottom (clear of the home indicator) */
+@media(max-width:719px){#setup input:not([type=radio]):not([type=checkbox]),#setup select{font-size:16px}}
+@media(max-width:599px){
+  #suwrap:not(.settings){max-width:none;min-height:100%;margin:0;padding:20px;border-radius:0;background:var(--md-sys-color-surface)}
+  #setupfoot{margin:var(--s-5) -20px -20px;padding:12px 20px calc(12px + env(safe-area-inset-bottom));border-radius:0;background:var(--md-sys-color-surface)}
+  .su-display{font-size:var(--md-sys-typescale-headline-small-size);line-height:var(--md-sys-typescale-headline-small-line-height)}
+  #setup input:not([type=radio]):not([type=checkbox]),#setup select{font-size:16px}
+  .su-nav-r{width:100%;margin-left:0}
+  .su-nav-r>.su-btn{flex:1 1 0}
+}
+/* the toast clears the wizard's sticky footer on phones (only when a footer is shown) */
+@media(max-width:599px){#setup:has(#setupfoot:not(:empty)) .su-toast{bottom:96px}}
+/* transport: the right group (date stepper, Export) sits on its own full-width row in panes narrower than 840px */
+main{container-type:inline-size}
+@container (max-width:839px){.tx-r{flex:1 0 100%;justify-content:space-between;margin-left:0}}
+/* Live/Recorded segmented control: selected segment is raised on the track */
+/* right group of the app bar: Theme (icon only) and Settings (gear, label at 960px and up); 36px ghost buttons, 44px below 600px */
+/* both are M3 standard icon buttons: 40px visible circle in a 48px touch area (inset 4px) */
+.pb-settings,.pb-theme{position:relative;isolation:isolate;display:inline-flex;align-items:center;justify-content:center;gap:var(--s-2);flex:none;width:48px;height:48px;min-width:48px;padding:0;
+  border:0;border-radius:var(--md-sys-shape-corner-full);background:transparent;color:var(--md-sys-color-on-surface-variant);font:inherit;font-size:var(--md-sys-typescale-label-large-size);
+  line-height:var(--md-sys-typescale-label-large-line-height);font-weight:var(--md-sys-typescale-label-large-weight);cursor:pointer}
+.pb-settings .pb-ico,.pb-theme .pb-ico{width:24px;height:24px}
+/* Add camera: M3 standard icon button (plus), the same 40px circle in a 48px touch area as Theme and Settings (hidden below 600px) */
+#addcam{position:relative;isolation:isolate;display:inline-flex;align-items:center;justify-content:center;flex:none;width:48px;height:48px;min-width:48px;padding:0;border:0;border-radius:var(--md-sys-shape-corner-full);background:transparent;
+  color:var(--md-sys-color-on-surface-variant);font:inherit;cursor:pointer}
+#addcam .pb-ico{width:24px;height:24px}
+/* camera dropdown button (600px and below): tonal, outlined, full-round */
+.pb-camsel{display:none;align-self:center;position:relative;isolation:isolate;align-items:center;gap:var(--s-2);min-width:0;max-width:50vw;height:40px;padding:0 var(--s-3) 0 var(--s-4);
+  border:1px solid var(--md-sys-color-outline-variant);border-radius:var(--md-sys-shape-corner-full);background:var(--md-sys-color-surface-container-high);color:var(--md-sys-color-on-surface);
+  font:inherit;font-size:var(--md-sys-typescale-label-large-size);line-height:var(--md-sys-typescale-label-large-line-height);font-weight:var(--md-sys-typescale-label-large-weight);cursor:pointer}
+/* M3 state layers: a ::before in currentColor (hover .08, focus .10, pressed .10), under the content; the tab's own layer is above its indicator */
+.pb-camsel::before,#addcam::before,.pb-theme::before,.pb-settings::before,.pb-mi::before,.pb-tab::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;
+  opacity:0;pointer-events:none;transition:opacity var(--md-sys-motion-duration-short2) ease}
+.pb-theme::before,.pb-settings::before,#addcam::before{inset:4px}   /* the 40px circle inside the 48px touch area */
+.pb-camsel:hover::before,#addcam:hover::before,.pb-theme:hover::before,.pb-settings:hover::before,.pb-mi:hover::before,.pb-tab:hover::before{opacity:var(--md-sys-state-hover)}
+.pb-camsel:focus-visible::before,#addcam:focus-visible::before,.pb-theme:focus-visible::before,.pb-settings:focus-visible::before,.pb-mi:focus-visible::before,.pb-tab:focus-visible::before{opacity:var(--md-sys-state-focus)}
+.pb-camsel:active::before,#addcam:active::before,.pb-theme:active::before,.pb-settings:active::before,.pb-mi:active::before,.pb-tab:active::before{opacity:var(--md-sys-state-pressed)}
+/* the player controls: the same layer (segmented buttons, sound, date stepper, Export, dialog buttons, pad, presets menu) */
+.pb-seg-btn::before,.pb-sound::before,.date button::before,#exportbtn::before,#expcancel::before,#expgo::before,#ptz button::before,#ptzplist button::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;
+  opacity:0;pointer-events:none;transition:opacity var(--md-sys-motion-duration-short2) ease}
+.pb-seg-btn:hover::before,.pb-sound:hover::before,.date button:hover::before,#exportbtn:hover::before,#expcancel:hover::before,#expgo:hover::before,#ptz button:hover::before,#ptzplist button:hover::before{opacity:var(--md-sys-state-hover)}
+.pb-seg-btn:focus-visible::before,.pb-sound:focus-visible::before,.date button:focus-visible::before,#exportbtn:focus-visible::before,#expcancel:focus-visible::before,#expgo:focus-visible::before,#ptz button:focus-visible::before,#ptzplist button:focus-visible::before{opacity:var(--md-sys-state-focus)}
+.pb-seg-btn:active::before,.pb-sound:active::before,.date button:active::before,#exportbtn:active::before,#expcancel:active::before,#expgo:active::before,#ptz button:active::before,#ptzplist button:active::before{opacity:var(--md-sys-state-pressed)}
+.pb-camsel:focus-visible,#addcam:focus-visible,.pb-theme:focus-visible,.pb-settings:focus-visible,.pb-mi:focus-visible,.pb-tab:focus-visible{outline:2px solid var(--md-sys-color-primary);outline-offset:2px}
+#camname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pb-chev{color:var(--c-text-2);font-size:12px;line-height:16px}
+/* events header: title, count chip, refresh */
+.ev-top{display:flex;align-items:center;gap:var(--s-2);padding:var(--s-4) var(--s-4) var(--s-3)}
+#evhead h3{margin:0;font-size:var(--md-sys-typescale-title-medium-size);line-height:var(--md-sys-typescale-title-medium-line-height);font-weight:var(--md-sys-typescale-title-medium-weight);letter-spacing:var(--md-sys-typescale-title-medium-tracking);color:var(--md-sys-color-on-surface)}
+.pb-count{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 8px;border-radius:var(--md-sys-shape-corner-small);background:var(--md-sys-color-surface-container-highest);
+  color:var(--md-sys-color-on-surface-variant);font-size:var(--md-sys-typescale-label-small-size);line-height:var(--md-sys-typescale-label-small-line-height);font-weight:var(--md-sys-typescale-label-small-weight);letter-spacing:var(--md-sys-typescale-label-small-tracking);font-variant-numeric:tabular-nums}
+#evrefresh{position:relative;isolation:isolate;margin-left:auto;flex:none;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;
+  border:0;border-radius:var(--md-sys-shape-corner-full);background:transparent;color:var(--md-sys-color-on-surface-variant);cursor:pointer}
+#evrefresh:focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}
+#evhead #filters{padding:0 16px 12px}
+/* event rows: flat list, 72px rows */
+/* M3 two-line list item: 72px, 16px side padding, 4px between rows, state layer on the row, no dividers */
+.ev{position:relative;isolation:isolate;display:flex;align-items:center;gap:12px;min-height:72px;margin:0 8px 4px;padding:4px 16px;border-radius:var(--md-sys-shape-corner-small);background:transparent}
+.ev::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:var(--md-sys-color-on-surface);opacity:0;pointer-events:none;transition:opacity var(--md-sys-motion-duration-short2) ease}
+.ev:hover::before{opacity:var(--md-sys-state-hover)}
+.ev:focus-within::before{opacity:var(--md-sys-state-focus)}
+.ev:active::before{opacity:var(--md-sys-state-pressed)}
+.ev.on{background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container)}
+.evmain{display:flex;align-items:center;gap:12px;flex:1;min-width:0;height:100%;padding:0;border:0;border-radius:var(--r-sm);background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.th{position:relative;width:112px;height:63px;border-radius:var(--md-sys-shape-corner-small);overflow:hidden;background:#222;flex:none}
+.th-img{opacity:1}.th-img.fade{opacity:0;transition:opacity .2s}.th-img.fade.in{opacity:1}
+.th-ico{display:none;position:absolute;left:6px;top:6px;width:18px;height:18px;fill:none;stroke:var(--c-text-3);stroke-width:1.6;stroke-linejoin:round}
+.th.th-off .th-ico,.th.th-fail .th-ico{display:block}
+.th.th-wait,.th.th-off,.th.th-fail,.th.th-load{background:var(--c-line)}
+.th.th-wait::after,.th.th-load::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,var(--c-shim),transparent);transform:translateX(-100%);animation:thshim 1.4s ease-in-out infinite}
+@keyframes thshim{to{transform:translateX(100%)}}
+@media (prefers-reduced-motion:reduce){.th.th-wait::after,.th.th-load::after{animation:none}.th-img.fade{transition:none}}
+.th b{position:absolute;right:6px;bottom:6px;padding:0 6px;border-radius:var(--r-sm);background:rgba(0,0,0,.62);color:var(--c-on-media);
+  font:600 12px/18px var(--mono);font-variant-numeric:tabular-nums}
+.evtxt{display:grid;gap:4px;min-width:0}
+.ev .t{font-size:var(--md-sys-typescale-body-large-size);line-height:var(--md-sys-typescale-body-large-line-height);font-weight:var(--md-sys-typescale-body-large-weight);letter-spacing:var(--md-sys-typescale-body-large-tracking);font-variant-numeric:tabular-nums;white-space:nowrap;color:inherit}
+.ev .k{display:flex;align-items:center;gap:var(--s-2);font-size:var(--md-sys-typescale-body-medium-size);line-height:var(--md-sys-typescale-body-medium-line-height);letter-spacing:var(--md-sys-typescale-body-medium-tracking);color:var(--md-sys-color-on-surface-variant)}
+.ev.on .k{color:inherit}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none;background:var(--c-text-3)}
+/* per-row Export: a 40px standard icon button, shown on hover or focus (always on touch) */
+.exbtn{position:relative;isolation:isolate;flex:none;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;border:0;border-radius:var(--md-sys-shape-corner-full);
+  background:transparent;color:var(--md-sys-color-on-surface-variant);cursor:pointer;opacity:0;transition:opacity var(--t-fast) var(--ease)}
+.exbtn svg{width:24px;height:24px}
+.exbtn::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;opacity:0;pointer-events:none;transition:opacity var(--md-sys-motion-duration-short2) ease}
+.exbtn:hover::before{opacity:var(--md-sys-state-hover)}
+.exbtn:focus-visible::before{opacity:var(--md-sys-state-focus)}
+.exbtn:active::before{opacity:var(--md-sys-state-pressed)}
+.ev:hover .exbtn,.ev:focus-within .exbtn,.exbtn:focus-visible{opacity:1}
+@media(hover:none){.exbtn{opacity:1}}
+.chsk.w1{width:128px}.chsk.w2{width:150px}.chsk.w3{width:92px}
+/* empty, filtered, error and recordings-note states */
+/* empty state: centred secondary text with generous padding */
+.ev-state{margin:var(--s-4);padding:var(--s-8) var(--s-4);text-align:center;color:var(--md-sys-color-on-surface-variant);font-size:var(--md-sys-typescale-body-medium-size);line-height:var(--md-sys-typescale-body-medium-line-height);letter-spacing:var(--md-sys-typescale-body-medium-tracking)}
+.ev-state p{margin:0}
+/* banners (error, warn): tonal containers, no icon, 12px corners; Retry is a text button */
+.ev-state.ev-alert,.ev-state.ev-warn{padding:var(--s-3) var(--s-4);border-radius:var(--md-sys-shape-corner-medium);text-align:left}
+.ev-state.ev-alert{background:var(--md-sys-color-error-container);color:var(--md-sys-color-on-error-container)}
+.ev-state.ev-warn{background:var(--md-sys-color-warn-container);color:var(--md-sys-color-on-surface)}
+.ev-state .pb-btn{height:40px;min-height:40px;margin-top:var(--s-2);padding:0 var(--s-3);border:0;border-radius:var(--md-sys-shape-corner-full);background:transparent;color:var(--md-sys-color-primary);
+  font:inherit;font-size:var(--md-sys-typescale-label-large-size);line-height:var(--md-sys-typescale-label-large-line-height);font-weight:var(--md-sys-typescale-label-large-weight);letter-spacing:var(--md-sys-typescale-label-large-tracking)}
+.ev-state.ev-alert .pb-btn{color:var(--md-sys-color-on-error-container)}
+.pb-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ev-peek{display:none}
+/* 600-959: the camera tabs in the bar and a single column, events under the timeline (list capped at 60vh) */
+@media(min-width:600px) and (max-width:959px){
+  #cols{max-width:calc(720px + 2*var(--gut))}
+  #evpanel{margin-top:var(--s-6);border:0;border-radius:var(--md-sys-shape-corner-large);background:var(--md-sys-color-surface-container-low);overflow:hidden}
+  #evs{max-height:60vh;overflow-y:auto;padding-top:var(--s-3,12px)}
+}
+/* below 600: 56px app bar, one camera button, bottom sheets for cameras and events; 44px targets, 16px inputs */
+@media(max-width:599px){
+  .pb-bar{gap:var(--s-2)}
+  #vwrap{border-radius:var(--r-md)}
+  #vwrap #ptz{width:88px;height:88px}
+  #vwrap #ptzside{top:calc(var(--s-4) + 102px);width:88px}
+  #vwrap #ptzplist{width:112px}
+  #addcam,#chips{display:none}
+  .pb-camsel{display:inline-flex}
+  .pb-sound{width:44px;height:44px}
+  .pb-mi{min-height:56px}
+  /* the camera sheet: M3 modal bottom sheet (surface container low, 28px top corners, 32x4 drag handle) */
+  #camsheet{position:fixed;top:auto;bottom:0;left:0;right:0;margin:0;width:100%;max-width:none;border:0;
+    border-radius:var(--md-sys-shape-corner-extra-large) var(--md-sys-shape-corner-extra-large) 0 0;background:var(--md-sys-color-surface-container-low);color:var(--md-sys-color-on-surface);
+    padding:var(--s-3) var(--s-4) calc(var(--s-4) + env(safe-area-inset-bottom))}
+  #camsheet::before{content:"";display:block;width:32px;height:4px;margin:0 auto var(--s-4);border-radius:var(--md-sys-shape-corner-full);background:var(--md-sys-color-outline-variant)}
+  #camlist .pb-mi[aria-current="true"]{background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container);font-weight:600}
+  #camlist .pb-mi[data-s]::after{content:"";width:6px;height:6px;margin-left:auto;border-radius:50%;background:var(--c-text-3)}
+  #camlist .pb-mi[data-s="ok"]::after{background:var(--c-ok)}
+  #camlist .pb-mi[data-s="wait"]::after{background:var(--c-warn)}
+  #camlist .pb-mi[data-s="bad"]::after{background:var(--c-bad)}
+  .ev-peek{display:flex;position:relative;align-items:center;justify-content:center;width:100%;height:64px;padding:0;border:0;background:transparent;
+    color:var(--c-text);font:inherit;font-size:15px;line-height:20px;font-weight:600;cursor:pointer;flex:none}
+  .ev-peek::before{content:"";position:absolute;top:8px;left:50%;width:32px;height:4px;margin-left:-16px;border-radius:var(--md-sys-shape-corner-full);background:var(--md-sys-color-outline-variant)}
+  #evpanel{position:fixed;left:0;right:0;bottom:0;z-index:15;height:85vh;display:flex;flex-direction:column;background:var(--md-sys-color-surface-container-low);
+    border:0;border-radius:var(--md-sys-shape-corner-extra-large) var(--md-sys-shape-corner-extra-large) 0 0;transform:translateY(calc(100% - 64px - env(safe-area-inset-bottom)));
+    transition:transform var(--t-base) var(--ease);padding-bottom:env(safe-area-inset-bottom)}
+  #evpanel.open{transform:none}
+  #evpanel:not(.open) #evhead,#evpanel:not(.open) #evs{visibility:hidden}
+  #evs{flex:1;min-height:0;overflow-y:auto;padding-top:var(--s-3)}
+  #app{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+  /* tooltips are hover-only and their hidden boxes (max-width 260px) stretched the page sideways: drop them here */
+  [data-tip]::after{display:none}
+  /* transport bar rows: mode (+ sound), speed, date + export */
+  .bar{gap:var(--s-3)}
+  #modeseg{flex:1;min-width:0}
+  #modeseg .pb-seg-btn{flex:1;justify-content:center}
+  .tx-r{flex:1 1 100%;margin-left:0;min-width:0}
+  .tx-r .date{flex:1;min-width:0}
+  .tx-r .date .d{flex:1;min-width:0}
+  /* 48px touch targets around the 40px icon buttons */
+  #evrefresh::after,.exbtn::after{content:"";position:absolute;inset:-4px}
+  .exbtn{opacity:1}
+  .date{height:44px}
+  .date button{height:44px;min-width:44px}
+  .pb-btn{min-height:44px}
+  .pb-seg{height:52px}
+  .pb-seg-btn{height:44px}
+  #filters .chip::after{content:"";position:absolute;inset:-8px 0}
+  dialog input,dialog select{font-size:16px}
+  dialog .row button,#exp .row button{min-height:44px}
+}
+/* phone that is tall enough (e.g. 412x924): events sit under the timeline as a card and the page scrolls, no bottom sheet */
+@media(max-width:599px) and (min-height:760px){
+  .ev-peek{display:none}
+  #evpanel{position:static;height:auto;display:block;transform:none;transition:none;margin-top:var(--s-4);padding-bottom:0;
+    border:0;border-radius:var(--md-sys-shape-corner-large);background:var(--md-sys-color-surface-container-low);overflow:hidden}
+  #evpanel:not(.open) #evhead,#evpanel:not(.open) #evs{visibility:visible}
+  #evs{overflow:visible}
+  #app{padding-bottom:0}
+}
+
+/* First paint: no stray playhead before the canvas is sized, no empty count badge, same skeleton as while loading. */
+#tlwrap:not(.ready) #head,#tlwrap:not(.ready) #bubble{visibility:hidden}
+.pb-count:empty{display:none}
