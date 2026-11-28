@@ -208,6 +208,7 @@ class StillNoAudio(unittest.TestCase):
         self.assertEqual(args[-1].rsplit("/", 1)[-1], "a.jpg")
         self.assertEqual(args[args.index("-frames:v") + 1], "1")
         self.assertEqual(args[args.index("-vf") + 1], "scale=320:-2")
+        self.assertEqual(args[args.index("-v") + 1], "fatal")
 
 
 class Flag(unittest.TestCase):

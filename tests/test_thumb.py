@@ -442,6 +442,7 @@ class SingleStill(P2PFetchBase):
         self.assertLess(args.index("-an"), len(args) - 1)
         self.assertTrue(args[-1].endswith(f"{self.cid}_{TS}.jpg"))
         self.assertEqual(args[args.index("-frames:v") + 1], "1")
+        self.assertEqual(args[args.index("-v") + 1], "fatal")
 
     def test_thumb_fast_false_downloads_the_mp4_clip_with_still_off(self):
         seen = []

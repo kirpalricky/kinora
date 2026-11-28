@@ -497,7 +497,7 @@ async function startLive(){
   const src=`/live/${cam}/index.m3u8`;
   const pf=await preflight(src);          // starts the relay and reports why it could not start
   if(!liveOn) return;
-  if(!pf.ok){ setMsg(pf.text,true); liveOn=false; markMode(); setBase({kind:'idle'}); applyRate(); return; }
+  if(!pf.ok){ setMsg(pf.text,true); liveOn=false; markMode(); setBase({kind:'idle'}); applyRate(); thumbPump(); return; }   // Live did not start: thumbnails waiting for it resume
   const fail=m=>{ setMsg(m,true); };
   // The wait above can outlast the browser's "recent click" window, and browsers refuse
   // unmuted autoplay without one. Start muted (always allowed); unmute with the player controls.
@@ -622,7 +622,7 @@ function thumbPump(){
   clearTimeout(TH.timer); TH.timer=null;
   if(TH.inflight) return;
   const list=[...TH.items.values()].filter(it=>it.vis&&it.state==='queued');
-  if(!thumbMayRun(liveOn,list.length,camMeta[cam]?.tbl!==false)) return;
+  if(!thumbMayRun(liveOn||liveWanted,list.length,camMeta[cam]?.tbl!==false)) return;
   const now=Date.now(), i=thumbPick(list,now);
   if(i<0){ TH.timer=setTimeout(thumbPump,thumbWakeMs(list,now)); return; }
   thumbFetch(list[i]);

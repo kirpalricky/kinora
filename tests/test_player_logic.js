@@ -135,7 +135,9 @@ check('slot classes: show, off, failed, everything else is the quiet wait placeh
 const thumbBlock = src.slice(src.indexOf('function thumbReset'), src.indexOf('function evRow'));
 check('loader: no broken-image <img> template in rows, fetch to a blob URL, Retry-After read', !/<img loading="lazy"/.test(src) && /URL\.createObjectURL/.test(thumbBlock) && /Retry-After/.test(thumbBlock));
 check('loader: fetches only visible rows (IntersectionObserver) and one at a time (inflight guard)', /new IntersectionObserver/.test(thumbBlock) && /TH\.inflight/.test(thumbBlock));
-check('loader: resets on camera or day change (load) and pauses via liveOn', /thumbReset\(\); const seq=\+\+loadSeq/.test(src) && /thumbMayRun\(liveOn/.test(thumbBlock));
+check('loader: resets on camera or day change (load) and pauses via liveOn', /thumbReset\(\); const seq=\+\+loadSeq/.test(src) && /thumbMayRun\(liveOn\|\|liveWanted,/.test(thumbBlock));
+// Live wanted but not started (start failed): the queue is resumed, not left paused
+check('loader: a failed Live start resumes the thumbnail queue (thumbPump after the pf.ok check)', /if\(!pf\.ok\)[^\n]*thumbPump\(\)/.test(src));
 // Player layout (the design notes): static checks; the measured checks are done in a browser
 const at2 = s => html.indexOf(s);
 check('camstat sits after the transport bar and after the video (so showing it never moves the video)', at2('id="camstat"') > at2('id="vwrap"') && at2('id="camstat"') > at2('class="bar"') && at2('id="camstat"') < at2('id="livestat"'));

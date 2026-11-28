@@ -33,7 +33,7 @@ def resolve_home():
 
 HOME = resolve_home()
 PORT = int(env("PORT", "8080"))
-VERSION = "1.1.1"   # shown in Settings > About; bump with each release
+VERSION = "1.1.2"   # shown in Settings > About; bump with each release
 CACHE = HOME / "cache"
 META = CACHE / "meta"
 EXPORTS = HOME / "exports"

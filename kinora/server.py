@@ -431,7 +431,7 @@ def _batch_starts(cam, ts):
 async def _still(mp4, jpg):
     """One ffmpeg still (320 px wide) of a thumbnail clip: the command of the single thumbnail path."""
     proc = await asyncio.create_subprocess_exec(
-        ffmpeg_path(), "-v", "error", "-y", "-i", str(mp4), "-frames:v", "1", "-vf", "scale=320:-2", "-an", str(jpg))
+        ffmpeg_path(), "-v", "fatal", "-y", "-i", str(mp4), "-frames:v", "1", "-vf", "scale=320:-2", "-an", str(jpg))
     await proc.wait()
 
 
@@ -601,7 +601,7 @@ async def thumb(request):
             finally:
                 _thumb_p2p_end[cam["id"]] = time.monotonic()
             proc = await asyncio.create_subprocess_exec(
-                ffmpeg_path(), "-v", "error", "-y", "-i", str(CACHE / tmp), "-frames:v", "1",
+                ffmpeg_path(), "-v", "fatal", "-y", "-i", str(CACHE / tmp), "-frames:v", "1",
                 "-vf", "scale=320:-2", "-an", str(jpg))
             await proc.wait()
             if still and not jpg.exists():   # the stream held no decodable frame: memoised only (never counted)
